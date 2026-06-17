@@ -1,0 +1,52 @@
+[package]
+name = "ragpilot"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "ragpilot"
+path = "src/main.rs"
+
+[dependencies]
+# Async
+tokio       = { version = "1", features = ["full"] }
+async-trait = "0.1"
+
+# Serialization (MCP JSON-RPC + config)
+serde       = { version = "1", features = ["derive"] }
+serde_json  = "1"
+toml        = "0.8"
+
+# Embedding — Local ONNX
+fastembed   = "4"
+
+# HTTP (API embedding)
+reqwest     = { version = "0.12", features = ["json"] }
+
+# Qdrant
+qdrant-client = "1"
+
+# File operations
+walkdir  = "2"
+glob     = "0.3"
+md5      = "0.7"
+
+# File watching
+notify   = "6"
+
+# SQLite (SymbolGraph + ProjectTree + ImpactIndex)
+rusqlite = { version = "0.31", features = ["bundled"] }
+
+# Regex parsing (symbol / import extraction)
+regex    = "1"
+
+# Utilities
+anyhow             = "1"
+uuid               = { version = "1", features = ["v4"] }
+chrono             = { version = "0.4", features = ["serde"] }
+tracing            = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+dirs               = "5"
+indicatif          = "0.17"
+colored            = "2"
+tiktoken-rs        = "0.6"
