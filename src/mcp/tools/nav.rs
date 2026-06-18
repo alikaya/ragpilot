@@ -47,7 +47,7 @@ pub async fn symbol_resolve(req: &McpRequest, args: &serde_json::Value, ctx: &Mc
     if matches.is_empty() {
         return McpResponse::tool_text(
             req.id.clone(),
-            format!("Symbol '{}' not found. Run 'rag init' to build the symbol index.", symbol),
+            format!("Symbol '{}' not found. Run 'ragpilot init' to build the symbol index.", symbol),
         );
     }
 

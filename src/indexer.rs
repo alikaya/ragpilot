@@ -610,7 +610,7 @@ pub async fn cmd_update() -> Result<()> {
 
     let root = current_root()?;
     let config =
-        Config::load(&Config::config_path(&root)).map_err(|_| anyhow::anyhow!("No .rag/config.toml found. Run 'rag init' first."))?;
+        Config::load(&Config::config_path(&root)).map_err(|_| anyhow::anyhow!("No .rag/config.toml found. Run 'ragpilot init' first."))?;
 
     let state = IndexState::load(&Config::state_path(&root))?;
     println!("{} Checking for changes ({} files in index)…", "→".cyan(), state.file_hashes.len());
@@ -634,7 +634,7 @@ pub async fn cmd_status() -> Result<()> {
 
     let root = current_root()?;
     let config =
-        Config::load(&Config::config_path(&root)).map_err(|_| anyhow::anyhow!("No .rag/config.toml found. Run 'rag init' first."))?;
+        Config::load(&Config::config_path(&root)).map_err(|_| anyhow::anyhow!("No .rag/config.toml found. Run 'ragpilot init' first."))?;
     let state = IndexState::load(&Config::state_path(&root))?;
 
     println!("{}", "─── Project ─────────────────────────────".bold());
@@ -688,7 +688,7 @@ pub async fn cmd_status() -> Result<()> {
     println!("  max_context_files:  {}", config.mcp.max_context_files);
     println!("  max_context_chunks: {}", config.mcp.max_context_chunks);
     println!("  max_context_tokens: {}", config.mcp.max_context_tokens);
-    println!("  Run:                rag --mcp-server");
+    println!("  Run:                ragpilot --mcp-server");
 
     Ok(())
 }

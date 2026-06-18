@@ -104,13 +104,13 @@ pub async fn search(req: &McpRequest, args: &serde_json::Value, ctx: &McpContext
 
     if results.is_empty() {
         return McpResponse::tool_text(req.id.clone(),
-            "No results found. Run 'rag init' to index the project.".into());
+            "No results found. Run 'ragpilot init' to index the project.".into());
     }
 
     let items: Vec<serde_json::Value> = results.iter().map(format_result).collect();
     let mut out = serde_json::to_string_pretty(&items).unwrap_or_default();
     if has_dirty_files(ctx) {
-        out.push_str("\n\nIndex may be stale. Run rag.ensure_index or rag update.");
+        out.push_str("\n\nIndex may be stale. Run rag.ensure_index or ragpilot update.");
     }
     McpResponse::tool_text(req.id.clone(), out)
 }

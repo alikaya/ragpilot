@@ -88,7 +88,7 @@ async fn cmd_hooks() -> anyhow::Result<()> {
         );
     }
 
-    const HOOK_CONTENT: &str = "#!/bin/sh\nrag update 2>/dev/null || true\n";
+    const HOOK_CONTENT: &str = "#!/bin/sh\nragpilot update 2>/dev/null || true\n";
 
     for hook_name in &["post-commit", "post-merge"] {
         let hook_path = hooks_dir.join(hook_name);
@@ -132,7 +132,7 @@ async fn cmd_doctor() -> anyhow::Result<()> {
     let state_path  = config::Config::state_path(&root);
     let stores_path = config::Config::stores_db(&root);
 
-    println!("{}", "─── rag doctor ─────────────────────────────────".bold());
+    println!("{}", "─── ragpilot doctor ────────────────────────────".bold());
 
     // 1. Config
     check("Config file exists",   config_path.exists());
@@ -177,11 +177,11 @@ async fn cmd_doctor() -> anyhow::Result<()> {
 
     // 3. Binary in PATH
     let rag_in_path = std::process::Command::new("which")
-        .arg("rag")
+        .arg("ragpilot")
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false);
-    check("'rag' binary in PATH", rag_in_path);
+    check("'ragpilot' binary in PATH", rag_in_path);
 
     // 4. Git repo
     check("Git repository", root.join(".git").exists());
@@ -205,8 +205,8 @@ async fn cmd_doctor() -> anyhow::Result<()> {
     check("Claude Code MCP registration (.claude/settings.json)", mcp_ok);
 
     println!("\n{}", "─── Quick Fix ──────────────────────────────────".bold());
-    println!("  rag init          Index the project");
-    println!("  rag hooks         Install git hooks");
+    println!("  ragpilot init     Index the project");
+    println!("  ragpilot hooks    Install git hooks");
     println!("  Add to .claude/settings.json:");
     println!(r#"    {{"mcpServers":{{"rag":{{"type":"stdio","command":"ragpilot","args":["--mcp-server"]}}}}}}"#);
 
@@ -229,11 +229,11 @@ async fn cmd_setup(args: &[String]) -> anyhow::Result<()> {
 
     let folder = match args.get(2) {
         Some(f) => f.clone(),
-        None    => anyhow::bail!("Usage: rag setup <folder> <agent>\n  Agents: codex, claude"),
+        None    => anyhow::bail!("Usage: ragpilot setup <folder> <agent>\n  Agents: codex, claude"),
     };
     let agent = match args.get(3) {
         Some(a) => a.clone(),
-        None    => anyhow::bail!("Usage: rag setup <folder> <agent>\n  Agents: codex, claude"),
+        None    => anyhow::bail!("Usage: ragpilot setup <folder> <agent>\n  Agents: codex, claude"),
     };
 
     // Resolve absolute path
@@ -289,7 +289,7 @@ async fn cmd_setup(args: &[String]) -> anyhow::Result<()> {
         cmd_hooks().await?;
     } else {
         println!(
-            "{} No .git found — skipping hooks. Run 'rag hooks' after 'git init'.",
+            "{} No .git found — skipping hooks. Run 'ragpilot hooks' after 'git init'.",
             "i".blue()
         );
     }
@@ -313,7 +313,7 @@ fn write_codex_files(root: &std::path::Path) -> anyhow::Result<()> {
             .to_string();
         let content = format!(
             "[projects.\"{}\"]\ntrust_level = \"trusted\"\n\n\
-             [mcp_servers.rag]\ncommand = \"rag\"\nargs    = [\"--mcp-server\"]\n\n\
+             [mcp_servers.rag]\ncommand = \"ragpilot\"\nargs    = [\"--mcp-server\"]\n\n\
              # Güvenlik için sadece bu projede aktif\ntrusted = true\n",
             root_str
         );
