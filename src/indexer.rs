@@ -580,14 +580,27 @@ pub async fn cmd_init(force: bool) -> Result<()> {
     let rag_dir = Config::rag_dir(&root);
     let config_path = Config::config_path(&root);
 
-    if !config_path.exists() || force {
+    // Only generate config when it's missing. `--force` drives a full
+    // re-index (below) but must NOT clobber a user-customized config.
+    if !config_path.exists() {
         std::fs::create_dir_all(&rag_dir)?;
         let project_name = root
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| "project".to_string());
-        std::fs::write(&config_path, Config::default_template(&project_name))?;
+        let choices = crate::wizard::configure(&root);
+        std::fs::write(
+            &config_path,
+            Config::template_with(&project_name, &choices.extensions, &choices.include_dirs),
+        )?;
         println!("{} Created {}", "✓".green(), config_path.display());
+        println!("    extensions: {}", choices.extensions.join(", "));
+        let dirs = if choices.include_dirs.is_empty() {
+            "(whole project root)".to_string()
+        } else {
+            choices.include_dirs.join(", ")
+        };
+        println!("    dirs:       {dirs}");
     } else {
         println!("{} Config already exists: {}", "i".blue(), config_path.display());
     }

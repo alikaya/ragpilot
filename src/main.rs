@@ -8,6 +8,7 @@ mod tokens;
 mod orchestrator;
 mod watcher;
 mod mcp;
+mod wizard;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -300,8 +301,19 @@ async fn cmd_setup(args: &[String]) -> anyhow::Result<()> {
     let config_path = rag_dir.join("config.toml");
     std::fs::create_dir_all(&rag_dir)?;
     if !config_path.exists() {
-        std::fs::write(&config_path, config::Config::default_template(&project_name))?;
+        let choices = wizard::configure(&root);
+        std::fs::write(
+            &config_path,
+            config::Config::template_with(&project_name, &choices.extensions, &choices.include_dirs),
+        )?;
         println!("{} .rag/config.toml", "✓".green());
+        println!("    {} {}", "uzantılar:".dimmed(), choices.extensions.join(", "));
+        let dirs = if choices.include_dirs.is_empty() {
+            "(tüm proje kökü)".to_string()
+        } else {
+            choices.include_dirs.join(", ")
+        };
+        println!("    {} {}", "dizinler:".dimmed(), dirs);
     } else {
         println!("{} .rag/config.toml (already exists)", "i".blue());
     }
