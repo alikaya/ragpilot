@@ -4,3 +4,13 @@
 # Environment
 .env
 
+# Embedding model cache (large, generated)
+.fastembed_cache/
+
+# Local RAG index (generated per-project)
+.rag/
+
+
+# Python bytecode (bench scripts)
+__pycache__/
+*.pyc

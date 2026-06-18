@@ -208,7 +208,7 @@ async fn cmd_doctor() -> anyhow::Result<()> {
     println!("  rag init          Index the project");
     println!("  rag hooks         Install git hooks");
     println!("  Add to .claude/settings.json:");
-    println!(r#"    {{"mcpServers":{{"rag":{{"type":"stdio","command":"rag","args":["--mcp-server"]}}}}}}"#);
+    println!(r#"    {{"mcpServers":{{"rag":{{"type":"stdio","command":"ragpilot","args":["--mcp-server"]}}}}}}"#);
 
     Ok(())
 }
@@ -344,7 +344,7 @@ fn write_claude_files(root: &std::path::Path) -> anyhow::Result<()> {
     let mcp_json_path = root.join(".mcp.json");
     let rag_entry = serde_json::json!({
         "type":    "stdio",
-        "command": "rag",
+        "command": "ragpilot",
         "args":    ["--mcp-server"]
     });
 

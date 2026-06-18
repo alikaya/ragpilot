@@ -5,7 +5,7 @@ use std::time::Instant;
 
 use super::McpContext;
 use crate::config::Config;
-use crate::indexer::{BundleTokenStats, IndexState};
+use crate::indexer::{file_language, BundleTokenStats, IndexState};
 use crate::mcp::protocol::{McpRequest, McpResponse};
 use crate::store::SearchFilters;
 use super::rag::format_result;
@@ -134,14 +134,58 @@ pub async fn bundle(req: &McpRequest, args: &serde_json::Value, ctx: &McpContext
         output.insert("tree_snapshot".into(), json!(tree_out));
     }
 
-    let estimated_saved_tokens = candidate_chunks_estimated_tokens.saturating_sub(selected_chunks_estimated_tokens);
-    let estimated_saving_percent = if candidate_chunks_estimated_tokens == 0 {
+    // ── 5. Token-saving metrics ───────────────────────────────────────────────
+    // Honest baseline: what it would cost to read the matched files WHOLE — the
+    // "no-RAG" counterfactual. Measured with the SAME tokenizer as the delivered
+    // bundle so the ratio is comparable. Note: this is an UPPER BOUND on saving
+    // vs. a disciplined partial read, and ignores any follow-up tool calls.
+    let full_file_baseline_tokens: usize = matched_paths
+        .iter()
+        .filter_map(|rel| {
+            std::fs::read_to_string(ctx.root.join(rel))
+                .ok()
+                .map(|content| estimate_tokens_for_text(&content, &file_language(rel)))
+        })
+        .sum();
+    let saving_vs_full_file_tokens = full_file_baseline_tokens.saturating_sub(used_tokens);
+    let saving_vs_full_file_percent = if full_file_baseline_tokens == 0 {
         0.0
     } else {
-        (estimated_saved_tokens as f64 * 100.0) / candidate_chunks_estimated_tokens as f64
+        (saving_vs_full_file_tokens as f64 * 100.0) / full_file_baseline_tokens as f64
     };
+    let saving_ratio = if used_tokens == 0 {
+        0.0
+    } else {
+        full_file_baseline_tokens as f64 / used_tokens as f64
+    };
+
+    // Secondary tuning metric: how much the budget cap trimmed the retrieved
+    // chunk set. NOT a value measure — a higher number just means more was
+    // dropped (a smaller budget inflates it), so never read it as "savings".
+    let budget_trimmed_tokens =
+        candidate_chunks_estimated_tokens.saturating_sub(selected_chunks_estimated_tokens);
+    let budget_trim_percent = if candidate_chunks_estimated_tokens == 0 {
+        0.0
+    } else {
+        (budget_trimmed_tokens as f64 * 100.0) / candidate_chunks_estimated_tokens as f64
+    };
+
+    let round2 = |x: f64| (x * 100.0).round() / 100.0;
     output.insert("approx_tokens_used".into(), json!(used_tokens));
     output.insert("estimated_tokens".into(), json!(used_tokens));
+    output.insert(
+        "full_file_baseline_tokens".into(),
+        json!(full_file_baseline_tokens),
+    );
+    output.insert(
+        "saving_vs_full_file_tokens".into(),
+        json!(saving_vs_full_file_tokens),
+    );
+    output.insert(
+        "saving_vs_full_file_percent".into(),
+        json!(round2(saving_vs_full_file_percent)),
+    );
+    output.insert("saving_ratio".into(), json!(round2(saving_ratio)));
     output.insert(
         "candidate_chunks_estimated_tokens".into(),
         json!(candidate_chunks_estimated_tokens),
@@ -150,11 +194,7 @@ pub async fn bundle(req: &McpRequest, args: &serde_json::Value, ctx: &McpContext
         "selected_chunks_estimated_tokens".into(),
         json!(selected_chunks_estimated_tokens),
     );
-    output.insert("estimated_saved_tokens".into(), json!(estimated_saved_tokens));
-    output.insert(
-        "estimated_saving_percent".into(),
-        json!((estimated_saving_percent * 100.0).round() / 100.0),
-    );
+    output.insert("budget_trim_percent".into(), json!(round2(budget_trim_percent)));
 
     let state_path = Config::state_path(&ctx.root);
     let mut state = IndexState::load(&state_path).unwrap_or_default();
@@ -163,10 +203,13 @@ pub async fn bundle(req: &McpRequest, args: &serde_json::Value, ctx: &McpContext
         generated_at: Some(chrono::Utc::now()),
         duration_ms: started.elapsed().as_millis(),
         estimated_tokens: used_tokens,
+        full_file_baseline_tokens,
+        saving_vs_full_file_tokens,
+        saving_vs_full_file_percent: round2(saving_vs_full_file_percent),
+        saving_ratio: round2(saving_ratio),
         candidate_chunks_estimated_tokens,
         selected_chunks_estimated_tokens,
-        estimated_saved_tokens,
-        estimated_saving_percent: (estimated_saving_percent * 100.0).round() / 100.0,
+        budget_trim_percent: round2(budget_trim_percent),
     });
     let _ = state.save(&state_path);
 

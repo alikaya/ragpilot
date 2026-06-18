@@ -40,14 +40,22 @@ pub struct BundleTokenStats {
     pub duration_ms: u128,
     #[serde(default)]
     pub estimated_tokens: usize,
+    /// Honest baseline: cost of reading the matched files whole (no-RAG case).
+    #[serde(default)]
+    pub full_file_baseline_tokens: usize,
+    #[serde(default)]
+    pub saving_vs_full_file_tokens: usize,
+    #[serde(default)]
+    pub saving_vs_full_file_percent: f64,
+    #[serde(default)]
+    pub saving_ratio: f64,
     #[serde(default)]
     pub candidate_chunks_estimated_tokens: usize,
     #[serde(default)]
     pub selected_chunks_estimated_tokens: usize,
+    /// Tuning-only: fraction of retrieved chunks dropped by the budget cap.
     #[serde(default)]
-    pub estimated_saved_tokens: usize,
-    #[serde(default)]
-    pub estimated_saving_percent: f64,
+    pub budget_trim_percent: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -691,7 +699,16 @@ pub async fn cmd_stats() -> Result<()> {
     let root = current_root()?;
     let state = IndexState::load(&Config::state_path(&root))?;
 
-    println!("{}", "─── RAG Stats ───────────────────────────".bold());
+    const LW: usize = 28;
+    const VW: usize = 42;
+    let lh = "─".repeat(LW + 2);
+    let vh = "─".repeat(VW + 2);
+    let row = |label: &str, value: String| {
+        let v: String = value.chars().take(VW).collect();
+        println!("│ {:<LW$} │ {:<VW$} │", label, v);
+    };
+
+    println!("{}", "RAG Stats — last context.bundle".bold());
     match &state.last_bundle_token_stats {
         Some(s) => {
             let at = s
@@ -699,28 +716,33 @@ pub async fn cmd_stats() -> Result<()> {
                 .map(|d| d.format("%Y-%m-%d %H:%M:%S UTC").to_string())
                 .unwrap_or_else(|| "unknown".to_string());
             let secs = s.duration_ms / 1000;
-            let mins = secs / 60;
-            let rem_secs = secs % 60;
-            println!("  Last bundle: {}", at);
-            println!("  Task: {}", s.task);
-            println!("  Worked for: {}m {}s", mins, rem_secs);
-            println!("  estimated_tokens: {}", s.estimated_tokens);
-            println!(
-                "  candidate_chunks_estimated_tokens: {}",
-                s.candidate_chunks_estimated_tokens
+
+            println!("┌{}┬{}┐", lh, vh);
+            row("Metric", "Value".to_string());
+            println!("├{}┼{}┤", lh, vh);
+            row("Generated at", at);
+            row("Task", s.task.clone());
+            row("Duration", format!("{}s", secs));
+            row("Bundle delivered", format!("{} tokens", s.estimated_tokens));
+            row(
+                "Full-file baseline (no-RAG)",
+                format!("{} tokens", s.full_file_baseline_tokens),
             );
-            println!(
-                "  selected_chunks_estimated_tokens: {}",
-                s.selected_chunks_estimated_tokens
+            row(
+                "Saving vs full-file read",
+                format!("{} tokens", s.saving_vs_full_file_tokens),
             );
-            println!("  estimated_saved_tokens: {}", s.estimated_saved_tokens);
+            row("Saving percent", format!("{:.2}%", s.saving_vs_full_file_percent));
+            row("Saving ratio", format!("{:.2}x", s.saving_ratio));
+            row("Budget trim (tuning only)", format!("{:.2}%", s.budget_trim_percent));
+            println!("└{}┴{}┘", lh, vh);
             println!(
-                "  estimated_saving_percent: {:.2}%",
-                s.estimated_saving_percent
+                "{}",
+                "Note: baseline is an upper bound vs naive full-file reads; excludes follow-up calls.".dimmed()
             );
         }
         None => {
-            println!("  No context.bundle stats recorded yet.");
+            println!("No context.bundle stats recorded yet.");
         }
     }
     Ok(())
