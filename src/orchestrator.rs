@@ -190,6 +190,7 @@ impl IndexOrchestrator {
     async fn remove_file(&self, rel_str: &str) {
         let _ = self.vector_store.delete_by_source(rel_str).await;
         let _ = self.project_tree.remove(rel_str).await;
+        let _ = self.symbol_graph.remove(rel_str).await;
     }
 
     /// Scan all files, find dirty ones, reindex them (vector + symbol graph + tree).
@@ -245,6 +246,17 @@ impl IndexOrchestrator {
             tracing::debug!("Removing stale entry: {}", s);
             self.remove_file(&s).await;
             new_hashes.remove(&s);
+        }
+
+        // Self-heal the symbol graph: drop any orphaned file whose path is no
+        // longer scanned (e.g. left behind after a delete diverged from state).
+        if self.config.symbol_graph.enabled {
+            let keep: Vec<String> = scanned.iter().cloned().collect();
+            if let Ok(n) = self.symbol_graph.prune_except(keep).await {
+                if n > 0 {
+                    tracing::debug!("Pruned {n} orphaned file(s) from symbol graph");
+                }
+            }
         }
 
         let max_parallel_files = self.config.indexing.max_parallel_files.max(1);
