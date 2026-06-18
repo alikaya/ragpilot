@@ -9,7 +9,7 @@ use tokio::task::JoinSet;
 use crate::config::Config;
 use crate::embedder::Embedder;
 use crate::indexer::{chunk_text, compute_hash, content_type_for, extract_symbol, file_language};
-use crate::parser::{Parser, RegexParser};
+use crate::parser::{Parser, TreeSitterParser};
 use crate::store::impact_index::ImpactIndexStore;
 use crate::store::project_tree::{node_from_path, ProjectTreeStore};
 use crate::store::symbol_graph::SymbolGraphStore;
@@ -29,7 +29,7 @@ pub struct IndexOrchestrator {
     pub symbol_graph: Arc<SymbolGraphStore>,
     pub project_tree: Arc<ProjectTreeStore>,
     pub impact_index: Arc<ImpactIndexStore>,
-    parser:           Arc<RegexParser>,
+    parser:           Arc<TreeSitterParser>,
 }
 
 impl IndexOrchestrator {
@@ -45,7 +45,7 @@ impl IndexOrchestrator {
         Self {
             config, root, embedder, vector_store,
             symbol_graph, project_tree, impact_index,
-            parser: Arc::new(RegexParser),
+            parser: Arc::new(TreeSitterParser::new()),
         }
     }
 

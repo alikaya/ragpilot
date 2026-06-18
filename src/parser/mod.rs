@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
 
 pub mod regex_parser;
+pub mod tree_sitter_parser;
 pub use regex_parser::RegexParser;
+pub use tree_sitter_parser::TreeSitterParser;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
