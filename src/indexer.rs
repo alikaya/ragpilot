@@ -544,6 +544,30 @@ fn current_root() -> Result<PathBuf> {
     std::env::current_dir().map_err(|e| anyhow::anyhow!("Cannot determine working directory: {e}"))
 }
 
+/// A unicode block-bar scaled so `value == max` fills `width` cells.
+/// A non-zero value always shows at least one cell.
+fn bar(value: usize, max: usize, width: usize) -> String {
+    if max == 0 || width == 0 {
+        return String::new();
+    }
+    let mut filled = (value * width + max / 2) / max; // rounded
+    if value > 0 && filled == 0 {
+        filled = 1;
+    }
+    "█".repeat(filled.min(width))
+}
+
+/// Truncate to `max` chars with an ellipsis, keeping the tail of file paths
+/// (the meaningful part) rather than the leading directories.
+fn ellipsize(s: &str, max: usize) -> String {
+    let len = s.chars().count();
+    if len <= max {
+        return s.to_string();
+    }
+    let tail: String = s.chars().skip(len - (max - 1)).collect();
+    format!("…{tail}")
+}
+
 fn resolve_store(config: &Config) -> Result<crate::store::qdrant::QdrantStore> {
     let mut cfg = config.qdrant.clone();
     cfg.collection = Some(cfg.collection_name(&config.project.name));
@@ -580,14 +604,27 @@ pub async fn cmd_init(force: bool) -> Result<()> {
     let rag_dir = Config::rag_dir(&root);
     let config_path = Config::config_path(&root);
 
-    if !config_path.exists() || force {
+    // Only generate config when it's missing. `--force` drives a full
+    // re-index (below) but must NOT clobber a user-customized config.
+    if !config_path.exists() {
         std::fs::create_dir_all(&rag_dir)?;
         let project_name = root
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| "project".to_string());
-        std::fs::write(&config_path, Config::default_template(&project_name))?;
+        let choices = crate::wizard::configure(&root);
+        std::fs::write(
+            &config_path,
+            Config::template_with(&project_name, &choices.extensions, &choices.include_dirs),
+        )?;
         println!("{} Created {}", "✓".green(), config_path.display());
+        println!("    extensions: {}", choices.extensions.join(", "));
+        let dirs = if choices.include_dirs.is_empty() {
+            "(whole project root)".to_string()
+        } else {
+            choices.include_dirs.join(", ")
+        };
+        println!("    dirs:       {dirs}");
     } else {
         println!("{} Config already exists: {}", "i".blue(), config_path.display());
     }
@@ -668,6 +705,49 @@ pub async fn cmd_status() -> Result<()> {
         })
         .count();
     println!("  Dirty files:   {}", dirty);
+
+    // ─── Symbols & Graph ───────────────────────────────────────────────────
+    if config.symbol_graph.enabled {
+        let db_path = Config::stores_db(&root);
+        // Ensure the schema exists even on a fresh / never-indexed db.
+        let _ = crate::store::sqlite::SqliteStore::new(db_path.clone());
+        let sg = crate::store::symbol_graph::SymbolGraphStore::new(db_path);
+        if let Ok(stats) = sg.graph_stats(8).await {
+            if stats.total_symbols > 0 {
+                println!("\n{}", "─── Symbols & Graph ─────────────────────".bold());
+                println!(
+                    "  Symbols: {}   Calls: {}   Imports: {}",
+                    stats.total_symbols.to_string().cyan(),
+                    stats.total_calls.to_string().cyan(),
+                    stats.total_imports.to_string().cyan(),
+                );
+
+                if !stats.by_kind.is_empty() {
+                    println!("  By kind:");
+                    let max = stats.by_kind.iter().map(|(_, c)| *c).max().unwrap_or(1);
+                    for (kind, c) in &stats.by_kind {
+                        println!("    {:<9} {} {}", kind, bar(*c, max, 16).cyan(), c);
+                    }
+                }
+
+                if !stats.hot_symbols.is_empty() {
+                    println!("  Hot symbols (most called):");
+                    let max = stats.hot_symbols.first().map(|(_, c)| *c).unwrap_or(1);
+                    for (name, c) in &stats.hot_symbols {
+                        println!("    {:<22} {} {}", ellipsize(name, 22), bar(*c, max, 12).green(), c);
+                    }
+                }
+
+                if !stats.top_files.is_empty() {
+                    println!("  Largest files (by symbols):");
+                    let max = stats.top_files.first().map(|(_, c)| *c).unwrap_or(1);
+                    for (path, c) in &stats.top_files {
+                        println!("    {:<30} {} {}", ellipsize(path, 30), bar(*c, max, 12).blue(), c);
+                    }
+                }
+            }
+        }
+    }
 
     println!("\n{}", "─── Qdrant ──────────────────────────────".bold());
     let store = resolve_store(&config)?;

@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
 
 pub mod regex_parser;
+pub mod tree_sitter_parser;
 pub use regex_parser::RegexParser;
+pub use tree_sitter_parser::TreeSitterParser;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -40,6 +42,20 @@ pub struct ParsedFile {
     pub symbols: Vec<Symbol>,
     pub imports: Vec<Import>,
     pub calls:   Vec<CallRef>,
+}
+
+/// A symbol plus its signature and source body, used by the semantic-diff tool
+/// to detect signature/return-type changes between two versions of a file.
+#[derive(Debug, Clone)]
+pub struct SymbolDetail {
+    pub name:       String,
+    pub kind:       String,
+    /// Declaration without the body — for Rust functions this is
+    /// `fn name(params) -> Ret`; for other kinds, the declaration line.
+    pub signature:  String,
+    /// Full source text of the symbol (for body-change detection).
+    pub body:       String,
+    pub start_line: usize,
 }
 
 // ─── Trait ───────────────────────────────────────────────────────────────────

@@ -234,6 +234,20 @@ fn default_search_tool_description() -> String {
         .to_string()
 }
 
+/// Render a list of strings as a multi-line TOML array literal.
+/// Empty input renders `[]` on a single line.
+fn toml_str_array<S: AsRef<str>>(items: &[S]) -> String {
+    if items.is_empty() {
+        return "[]".to_string();
+    }
+    let inner = items
+        .iter()
+        .map(|s| format!("  \"{}\"", s.as_ref()))
+        .collect::<Vec<_>>()
+        .join(",\n");
+    format!("[\n{inner}\n]")
+}
+
 impl Config {
     pub fn load(path: &Path) -> Result<Self> {
         let content = std::fs::read_to_string(path)
@@ -242,7 +256,21 @@ impl Config {
     }
 
     pub fn default_template(project_name: &str) -> String {
+        Self::template_with(project_name, &["rs", "toml", "md"], &["src"])
+    }
+
+    /// Build a `config.toml` with caller-chosen `include_extensions` and
+    /// `include_dirs` (the rest of the template is fixed). An empty
+    /// `include_dirs` slice renders `include_dirs = []`, meaning "scan the
+    /// whole project root" (see `indexer::scan_files_with_report`).
+    pub fn template_with<S: AsRef<str>>(
+        project_name: &str,
+        include_extensions: &[S],
+        include_dirs: &[S],
+    ) -> String {
         let collection = project_name.to_lowercase().replace([' ', '-'], "_");
+        let ext_array = toml_str_array(include_extensions);
+        let dir_array = toml_str_array(include_dirs);
         format!(
 r#"[project]
 name = "{project_name}"
@@ -271,11 +299,7 @@ embedding_batch_size = 16
 max_parallel_embeddings = 1
 skip_minified = true
 skip_binary = true
-include_extensions = [
-  "rs",
-  "toml",
-  "md"
-]
+include_extensions = {ext_array}
 exclude_dirs = [
   ".git",
   ".rag",
@@ -295,9 +319,7 @@ exclude_dirs = [
   ".idea",
   ".vscode"
 ]
-include_dirs = [
-  "src"
-]
+include_dirs = {dir_array}
 
 [mcp]
 context_chunks = 4
