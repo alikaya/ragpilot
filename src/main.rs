@@ -3,6 +3,8 @@ mod embedder;
 mod store;
 mod indexer;
 mod parser;
+mod skeleton;
+mod tokens;
 mod orchestrator;
 mod watcher;
 mod mcp;
@@ -30,6 +32,7 @@ async fn main() -> anyhow::Result<()> {
         Some("update") => indexer::cmd_update().await,
         Some("status") => indexer::cmd_status().await,
         Some("stats") => indexer::cmd_stats().await,
+        Some("skeleton") => cmd_skeleton(&args).await,
 
         Some("clean") => {
             let yes = args.iter().any(|a| a == "--yes" || a == "-y");
@@ -54,6 +57,7 @@ async fn main() -> anyhow::Result<()> {
                    ragpilot status                 Show index statistics\n\
 \n\
                    ragpilot stats                  Show last context.bundle token savings\n\
+                   ragpilot skeleton <file>        Print a token-efficient skeleton of a file\n\
 \n\
                    ragpilot clean [--yes]          Delete Qdrant collection\n\
                    ragpilot hooks                  Install git post-commit/post-merge hooks\n\
@@ -70,6 +74,39 @@ async fn main() -> anyhow::Result<()> {
             std::process::exit(1);
         }
     }
+}
+
+// ─── ragpilot skeleton ─────────────────────────────────────────────────────────
+
+async fn cmd_skeleton(args: &[String]) -> anyhow::Result<()> {
+    use colored::Colorize;
+
+    let path = args
+        .get(2)
+        .ok_or_else(|| anyhow::anyhow!("Usage: ragpilot skeleton <file>"))?;
+    let content = std::fs::read_to_string(path)
+        .map_err(|e| anyhow::anyhow!("Cannot read '{path}': {e}"))?;
+    let ext = std::path::Path::new(path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("");
+    let language = indexer::file_language(ext);
+
+    let sk = skeleton::skeletonize(&content, language);
+    let full = tokens::estimate(&content);
+    let skel = tokens::estimate(&sk);
+    let ratio = if skel == 0 { 0.0 } else { full as f64 / skel as f64 };
+
+    // Skeleton to stdout (pipeable); the summary to stderr.
+    print!("{sk}");
+    eprintln!(
+        "{}",
+        format!(
+            "── {language} | full {full} tok → skeleton {skel} tok ({ratio:.2}x reduction)"
+        )
+        .dimmed()
+    );
+    Ok(())
 }
 
 // ─── rag hooks ───────────────────────────────────────────────────────────────

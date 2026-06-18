@@ -64,7 +64,60 @@ pub fn tool_definitions(ctx: &McpContext) -> Vec<serde_json::Value> {
                 "required": ["path", "ranges"]
             }
         }),
+        json!({
+            "name": "rag.get_skeleton",
+            "description": "Return a token-efficient skeleton of a file: signatures, struct/enum/type definitions, imports and doc comments, with function bodies elided to '...'. Prefer this over reading whole files when you only need to understand a file's structure.",
+            "inputSchema": {
+                "type": "object",
+                "properties": { "path": { "type": "string" } },
+                "required": ["path"]
+            }
+        }),
     ]
+}
+
+// ─── rag.get_skeleton ─────────────────────────────────────────────────────────
+
+pub fn get_skeleton(req: &McpRequest, args: &serde_json::Value, ctx: &McpContext) -> McpResponse {
+    let rel_path = match args.get("path").and_then(|v| v.as_str()) {
+        Some(p) => p.trim_start_matches('/'),
+        None    => return McpResponse::tool_error(req.id.clone(), "Missing 'path'".into()),
+    };
+
+    let full_path = ctx.root.join(rel_path);
+    if !full_path.starts_with(&ctx.root) {
+        return McpResponse::tool_error(req.id.clone(), "Path outside project root".into());
+    }
+
+    let content = match std::fs::read_to_string(&full_path) {
+        Ok(c)  => c,
+        Err(e) => return McpResponse::tool_error(req.id.clone(), format!("Cannot read '{rel_path}': {e}")),
+    };
+
+    let ext = std::path::Path::new(rel_path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("");
+    let language = file_language(ext);
+    let skeleton = crate::skeleton::skeletonize(&content, language);
+
+    let full_tokens = crate::tokens::estimate(&content);
+    let skeleton_tokens = crate::tokens::estimate(&skeleton);
+    let reduction_ratio = if skeleton_tokens == 0 {
+        0.0
+    } else {
+        (full_tokens as f64 / skeleton_tokens as f64 * 100.0).round() / 100.0
+    };
+
+    let out = json!({
+        "path":            rel_path,
+        "language":        language,
+        "full_tokens":     full_tokens,
+        "skeleton_tokens": skeleton_tokens,
+        "reduction_ratio": reduction_ratio,
+        "skeleton":        skeleton,
+    });
+    McpResponse::tool_text(req.id.clone(), serde_json::to_string_pretty(&out).unwrap_or_default())
 }
 
 // ─── rag.search ──────────────────────────────────────────────────────────────
