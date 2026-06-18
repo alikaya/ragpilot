@@ -14,7 +14,7 @@ use std::sync::OnceLock;
 use streaming_iterator::StreamingIterator;
 use tree_sitter::{Node, Parser as TsParser, Query, QueryCursor};
 
-use super::{CallRef, Import, ParsedFile, Parser, RegexParser, Symbol};
+use super::{CallRef, Import, ParsedFile, Parser, RegexParser, Symbol, SymbolDetail};
 
 pub struct TreeSitterParser {
     fallback: RegexParser,
@@ -95,6 +95,65 @@ fn parse_rust(path: &str, content: &str) -> Option<ParsedFile> {
     let calls   = collect_calls(content, src, root, rl, &symbols);
 
     Some(ParsedFile { path: path.to_string(), symbols, imports, calls })
+}
+
+/// Extract per-symbol details (signature + body) for Rust. Returns `None` if
+/// tree-sitter fails to parse. Used by the semantic-diff tool.
+pub fn rust_details(content: &str) -> Option<Vec<SymbolDetail>> {
+    let rl = rust_lang();
+    let mut parser = TsParser::new();
+    parser.set_language(&rl.language).ok()?;
+    let tree = parser.parse(content, None)?;
+    let root = tree.root_node();
+    let src = content.as_bytes();
+    let names = rl.symbols.capture_names();
+
+    let mut cursor = QueryCursor::new();
+    let mut out = Vec::new();
+    let mut it = cursor.matches(&rl.symbols, root, src);
+    while let Some(m) = it.next() {
+        let mut name: Option<String> = None;
+        let mut kind: Option<&str> = None;
+        let mut node: Option<Node> = None;
+        for cap in m.captures {
+            let cn = names[cap.index as usize];
+            if cn == "name" {
+                name = Some(content[cap.node.byte_range()].to_string());
+            } else {
+                kind = Some(cn);
+                node = Some(cap.node);
+            }
+        }
+        if let (Some(name), Some(kind), Some(node)) = (name, kind, node) {
+            let full = content[node.byte_range()].to_string();
+            let signature = if kind == "function" {
+                match node.child_by_field_name("body") {
+                    Some(body) => normalize_ws(&content[node.start_byte()..body.start_byte()]),
+                    None => normalize_ws(first_line(&full)),
+                }
+            } else {
+                normalize_ws(first_line(&full))
+            };
+            out.push(SymbolDetail {
+                name,
+                kind: kind.to_string(),
+                signature,
+                body: full,
+                start_line: node.start_position().row + 1,
+            });
+        }
+    }
+    Some(out)
+}
+
+fn first_line(s: &str) -> &str {
+    s.split('\n').next().unwrap_or(s)
+}
+
+/// Collapse all runs of whitespace (incl. newlines) into single spaces so that
+/// multi-line signatures compare cleanly.
+fn normalize_ws(s: &str) -> String {
+    s.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 fn collect_symbols(path: &str, content: &str, src: &[u8], root: Node, rl: &RustLang) -> Vec<Symbol> {

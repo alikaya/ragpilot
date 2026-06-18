@@ -9,6 +9,7 @@ mod orchestrator;
 mod watcher;
 mod mcp;
 mod wizard;
+mod semantic_diff;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -34,6 +35,7 @@ async fn main() -> anyhow::Result<()> {
         Some("status") => indexer::cmd_status().await,
         Some("stats") => indexer::cmd_stats().await,
         Some("skeleton") => cmd_skeleton(&args).await,
+        Some("review") => cmd_review(&args).await,
 
         Some("clean") => {
             let yes = args.iter().any(|a| a == "--yes" || a == "-y");
@@ -59,6 +61,7 @@ async fn main() -> anyhow::Result<()> {
 \n\
                    ragpilot stats                  Show last context.bundle token savings\n\
                    ragpilot skeleton <file>        Print a token-efficient skeleton of a file\n\
+                   ragpilot review [<ref>]         Semantic diff: changed symbols + blast radius\n\
 \n\
                    ragpilot clean [--yes]          Delete Qdrant collection\n\
                    ragpilot hooks                  Install git post-commit/post-merge hooks\n\
@@ -75,6 +78,16 @@ async fn main() -> anyhow::Result<()> {
             std::process::exit(1);
         }
     }
+}
+
+// ─── ragpilot review ───────────────────────────────────────────────────────────
+
+async fn cmd_review(args: &[String]) -> anyhow::Result<()> {
+    let root = std::env::current_dir()?;
+    let target = args.get(2).map(|s| s.as_str());
+    let report = semantic_diff::analyze(&root, target).await?;
+    print!("{}", semantic_diff::render(&report));
+    Ok(())
 }
 
 // ─── ragpilot skeleton ─────────────────────────────────────────────────────────

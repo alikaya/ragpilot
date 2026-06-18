@@ -44,6 +44,20 @@ pub struct ParsedFile {
     pub calls:   Vec<CallRef>,
 }
 
+/// A symbol plus its signature and source body, used by the semantic-diff tool
+/// to detect signature/return-type changes between two versions of a file.
+#[derive(Debug, Clone)]
+pub struct SymbolDetail {
+    pub name:       String,
+    pub kind:       String,
+    /// Declaration without the body — for Rust functions this is
+    /// `fn name(params) -> Ret`; for other kinds, the declaration line.
+    pub signature:  String,
+    /// Full source text of the symbol (for body-change detection).
+    pub body:       String,
+    pub start_line: usize,
+}
+
 // ─── Trait ───────────────────────────────────────────────────────────────────
 
 pub trait Parser: Send + Sync {

@@ -14,6 +14,7 @@ pub mod nav;
 pub mod impact;
 pub mod context;
 pub mod index;
+pub mod review;
 
 // ─── Context ─────────────────────────────────────────────────────────────────
 
@@ -54,6 +55,7 @@ fn handle_tools_list(req: &McpRequest, ctx: &McpContext) -> McpResponse {
     tools.extend(impact::tool_definitions());
     tools.extend(context::tool_definitions());
     tools.extend(index::tool_definitions());
+    tools.extend(review::tool_definitions());
     McpResponse::ok(req.id.clone(), serde_json::json!({ "tools": tools }))
 }
 
@@ -79,6 +81,8 @@ async fn handle_tools_call(req: &McpRequest, ctx: &Arc<McpContext>) -> McpRespon
         "nav.call_graph"      => nav::call_graph(req, args, ctx).await,
         // Impact
         "impact.analyze"      => impact::analyze(req, args, ctx).await,
+        // Review / semantic diff
+        "review.semantic_diff" => review::semantic_diff(req, args, ctx).await,
         // Context bundle
         "context.bundle"      => context::bundle(req, args, ctx).await,
         // Index management
