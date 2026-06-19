@@ -10,7 +10,7 @@ pub mod impact_index;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Chunk {
-    /// Stable chunk ID: "relative/path:chunk_index" — used by rag.get_chunks
+    /// Stable chunk ID: "relative/path:chunk_index" — used by rag_get_chunks
     pub id: String,
     pub content: String,
     pub source: String,       // relative file path

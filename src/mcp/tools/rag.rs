@@ -11,7 +11,7 @@ use crate::mcp::protocol::{McpRequest, McpResponse};
 pub fn tool_definitions(ctx: &McpContext) -> Vec<serde_json::Value> {
     vec![
         json!({
-            "name": "rag.search",
+            "name": "rag_search",
             "description": ctx.config.mcp.search_tool_description,
             "inputSchema": {
                 "type": "object",
@@ -31,8 +31,8 @@ pub fn tool_definitions(ctx: &McpContext) -> Vec<serde_json::Value> {
             }
         }),
         json!({
-            "name": "rag.get_chunks",
-            "description": "Fetch full content of specific chunks by IDs returned from rag.search.",
+            "name": "rag_get_chunks",
+            "description": "Fetch full content of specific chunks by IDs returned from rag_search.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -43,7 +43,7 @@ pub fn tool_definitions(ctx: &McpContext) -> Vec<serde_json::Value> {
             }
         }),
         json!({
-            "name": "rag.get_file_ranges",
+            "name": "rag_get_file_ranges",
             "description": "Read specific line ranges or symbol definitions from a file.",
             "inputSchema": {
                 "type": "object",
@@ -65,7 +65,7 @@ pub fn tool_definitions(ctx: &McpContext) -> Vec<serde_json::Value> {
             }
         }),
         json!({
-            "name": "rag.get_skeleton",
+            "name": "rag_get_skeleton",
             "description": "Return a token-efficient skeleton of a file: signatures, struct/enum/type definitions, imports and doc comments, with function bodies elided to '...'. Prefer this over reading whole files when you only need to understand a file's structure.",
             "inputSchema": {
                 "type": "object",
@@ -76,7 +76,7 @@ pub fn tool_definitions(ctx: &McpContext) -> Vec<serde_json::Value> {
     ]
 }
 
-// ─── rag.get_skeleton ─────────────────────────────────────────────────────────
+// ─── rag_get_skeleton ─────────────────────────────────────────────────────────
 
 pub fn get_skeleton(req: &McpRequest, args: &serde_json::Value, ctx: &McpContext) -> McpResponse {
     let rel_path = match args.get("path").and_then(|v| v.as_str()) {
@@ -120,7 +120,7 @@ pub fn get_skeleton(req: &McpRequest, args: &serde_json::Value, ctx: &McpContext
     McpResponse::tool_text(req.id.clone(), serde_json::to_string_pretty(&out).unwrap_or_default())
 }
 
-// ─── rag.search ──────────────────────────────────────────────────────────────
+// ─── rag_search ──────────────────────────────────────────────────────────────
 
 pub async fn search(req: &McpRequest, args: &serde_json::Value, ctx: &McpContext) -> McpResponse {
     let query = match args.get("query").and_then(|v| v.as_str()) {
@@ -163,7 +163,7 @@ pub async fn search(req: &McpRequest, args: &serde_json::Value, ctx: &McpContext
     let items: Vec<serde_json::Value> = results.iter().map(format_result).collect();
     let mut out = serde_json::to_string_pretty(&items).unwrap_or_default();
     if has_dirty_files(ctx) {
-        out.push_str("\n\nIndex may be stale. Run rag.ensure_index or ragpilot update.");
+        out.push_str("\n\nIndex may be stale. Run rag_ensure_index or ragpilot update.");
     }
     McpResponse::tool_text(req.id.clone(), out)
 }
@@ -191,7 +191,7 @@ pub fn clamp_str(s: &str, max: usize) -> String {
     if chars.next().is_some() { format!("{}…", taken) } else { taken }
 }
 
-// ─── rag.get_chunks ──────────────────────────────────────────────────────────
+// ─── rag_get_chunks ──────────────────────────────────────────────────────────
 
 pub async fn get_chunks(req: &McpRequest, args: &serde_json::Value, ctx: &McpContext) -> McpResponse {
     let ids: Vec<&str> = match args.get("chunk_ids").and_then(|v| v.as_array()) {
@@ -221,7 +221,7 @@ pub async fn get_chunks(req: &McpRequest, args: &serde_json::Value, ctx: &McpCon
     McpResponse::tool_text(req.id.clone(), serde_json::to_string_pretty(&items).unwrap_or_default())
 }
 
-// ─── rag.get_file_ranges ──────────────────────────────────────────────────────
+// ─── rag_get_file_ranges ──────────────────────────────────────────────────────
 
 pub fn get_file_ranges(req: &McpRequest, args: &serde_json::Value, ctx: &McpContext) -> McpResponse {
     let rel_path = match args.get("path").and_then(|v| v.as_str()) {

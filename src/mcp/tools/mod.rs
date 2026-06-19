@@ -41,8 +41,19 @@ pub async fn handle_request(req: &McpRequest, ctx: &Arc<McpContext>) -> McpRespo
 }
 
 fn handle_initialize(req: &McpRequest) -> McpResponse {
+    // Echo the client's requested protocol version when provided so strict newer
+    // clients (e.g. Antigravity CLI / Gemini) negotiate cleanly; fall back to a
+    // known-good version otherwise. The tools capability shape is stable across
+    // these revisions, so echoing is safe.
+    let version = req
+        .params
+        .as_ref()
+        .and_then(|p| p.get("protocolVersion"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("2024-11-05")
+        .to_string();
     McpResponse::ok(req.id.clone(), serde_json::json!({
-        "protocolVersion": "2024-11-05",
+        "protocolVersion": version,
         "capabilities": { "tools": {} },
         "serverInfo": { "name": "ragpilot", "version": env!("CARGO_PKG_VERSION") }
     }))
@@ -70,27 +81,30 @@ async fn handle_tools_call(req: &McpRequest, ctx: &Arc<McpContext>) -> McpRespon
     };
     let args = params.get("arguments").unwrap_or(&serde_json::Value::Null);
 
-    match name {
+    // Tool names use underscores (e.g. `rag_search`) because several MCP clients
+    // (Antigravity/Gemini, Copilot, Cursor) reject or silently drop names with
+    // dots. Normalize any legacy dotted name to its underscore form so older
+    // configs keep working.
+    let normalized = name.replace('.', "_");
+
+    match normalized.as_str() {
         // RAG tools
-        "rag.search"          => rag::search(req, args, ctx).await,
-        "rag.get_chunks"      => rag::get_chunks(req, args, ctx).await,
-        "rag.get_file_ranges" => rag::get_file_ranges(req, args, ctx),
-        "rag.get_skeleton"    => rag::get_skeleton(req, args, ctx),
+        "rag_search"           => rag::search(req, args, ctx).await,
+        "rag_get_chunks"       => rag::get_chunks(req, args, ctx).await,
+        "rag_get_file_ranges"  => rag::get_file_ranges(req, args, ctx),
+        "rag_get_skeleton"     => rag::get_skeleton(req, args, ctx),
         // Navigation
-        "nav.symbol_resolve"  => nav::symbol_resolve(req, args, ctx).await,
-        "nav.call_graph"      => nav::call_graph(req, args, ctx).await,
+        "nav_symbol_resolve"   => nav::symbol_resolve(req, args, ctx).await,
+        "nav_call_graph"       => nav::call_graph(req, args, ctx).await,
         // Impact
-        "impact.analyze"      => impact::analyze(req, args, ctx).await,
+        "impact_analyze"       => impact::analyze(req, args, ctx).await,
         // Review / semantic diff
-        "review.semantic_diff" => review::semantic_diff(req, args, ctx).await,
+        "review_semantic_diff" => review::semantic_diff(req, args, ctx).await,
         // Context bundle
-        "context.bundle"      => context::bundle(req, args, ctx).await,
+        "context_bundle"       => context::bundle(req, args, ctx).await,
         // Index management
-        "rag.index_status"    => index::status(req, ctx).await,
-        "rag.ensure_index"    => index::ensure(req, args, ctx).await,
-        // Backward compat
-        "rag_search"          => rag::search(req, args, ctx).await,
-        "rag_index_status"    => index::status(req, ctx).await,
+        "rag_index_status"     => index::status(req, ctx).await,
+        "rag_ensure_index"     => index::ensure(req, args, ctx).await,
         other => McpResponse::tool_error(req.id.clone(), format!("Unknown tool: {other}")),
     }
 }

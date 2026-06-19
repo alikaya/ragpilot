@@ -153,7 +153,7 @@ impl SymbolGraphStore {
         Ok(symbols)
     }
 
-    /// All symbols defined in a path (for context.bundle).
+    /// All symbols defined in a path (for context_bundle).
     pub async fn symbols_in_file(&self, path: &str) -> Result<Vec<Symbol>> {
         let path    = path.to_string();
         let db_path = self.db_path.clone();

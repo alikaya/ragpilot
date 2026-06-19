@@ -5,7 +5,7 @@ use crate::mcp::protocol::{McpRequest, McpResponse};
 
 pub fn tool_definitions() -> Vec<serde_json::Value> {
     vec![json!({
-        "name": "impact.analyze",
+        "name": "impact_analyze",
         "description": "Given symbols or file paths, return which files and symbols would be affected by changes. Use before refactoring.",
         "inputSchema": {
             "type": "object",

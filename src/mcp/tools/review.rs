@@ -5,7 +5,7 @@ use crate::mcp::protocol::{McpRequest, McpResponse};
 
 pub fn tool_definitions() -> Vec<serde_json::Value> {
     vec![json!({
-        "name": "review.semantic_diff",
+        "name": "review_semantic_diff",
         "description": "Semantic diff of code changes: which SYMBOLS changed \
             (added / removed / signature_changed / modified) and their blast \
             radius — callers (from the symbol graph) and dependent files (from \

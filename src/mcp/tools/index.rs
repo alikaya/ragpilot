@@ -8,12 +8,12 @@ use crate::mcp::protocol::{McpRequest, McpResponse};
 pub fn tool_definitions() -> Vec<serde_json::Value> {
     vec![
         json!({
-            "name": "rag.index_status",
+            "name": "rag_index_status",
             "description": "Returns RAG index statistics: files indexed, chunks, last commit, dirty file count.",
             "inputSchema": { "type": "object", "properties": {} }
         }),
         json!({
-            "name": "rag.ensure_index",
+            "name": "rag_ensure_index",
             "description": "Incrementally re-indexes all changed files. Call this to make sure the index is current before starting a task.",
             "inputSchema": {
                 "type": "object",
@@ -25,7 +25,7 @@ pub fn tool_definitions() -> Vec<serde_json::Value> {
     ]
 }
 
-// ─── rag.index_status ────────────────────────────────────────────────────────
+// ─── rag_index_status ────────────────────────────────────────────────────────
 
 pub async fn status(req: &McpRequest, ctx: &McpContext) -> McpResponse {
     let state_path = Config::state_path(&ctx.root);
@@ -75,12 +75,12 @@ pub async fn status(req: &McpRequest, ctx: &McpContext) -> McpResponse {
     McpResponse::tool_text(req.id.clone(), text)
 }
 
-// ─── rag.ensure_index ────────────────────────────────────────────────────────
+// ─── rag_ensure_index ────────────────────────────────────────────────────────
 
 pub async fn ensure(req: &McpRequest, args: &serde_json::Value, ctx: &McpContext) -> McpResponse {
     let force = args.get("force").and_then(|v| v.as_bool()).unwrap_or(false);
 
-    tracing::info!("rag.ensure_index: force={}", force);
+    tracing::info!("rag_ensure_index: force={}", force);
 
     match ctx.orchestrator.ensure_index(force).await {
         Ok(r) => {
