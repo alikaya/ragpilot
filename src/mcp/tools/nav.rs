@@ -6,7 +6,7 @@ use crate::mcp::protocol::{McpRequest, McpResponse};
 pub fn tool_definitions() -> Vec<serde_json::Value> {
     vec![
         json!({
-            "name": "nav.symbol_resolve",
+            "name": "nav_symbol_resolve",
             "description": "Find where a symbol (function, class, struct, etc.) is defined. Returns file path, line number, and call graph edges.",
             "inputSchema": {
                 "type": "object",
@@ -17,7 +17,7 @@ pub fn tool_definitions() -> Vec<serde_json::Value> {
             }
         }),
         json!({
-            "name": "nav.call_graph",
+            "name": "nav_call_graph",
             "description": "Return the call graph around a symbol: what it calls and what calls it.",
             "inputSchema": {
                 "type": "object",
@@ -31,7 +31,7 @@ pub fn tool_definitions() -> Vec<serde_json::Value> {
     ]
 }
 
-// ─── nav.symbol_resolve ──────────────────────────────────────────────────────
+// ─── nav_symbol_resolve ──────────────────────────────────────────────────────
 
 pub async fn symbol_resolve(req: &McpRequest, args: &serde_json::Value, ctx: &McpContext) -> McpResponse {
     let symbol = match args.get("symbol").and_then(|v| v.as_str()) {
@@ -77,7 +77,7 @@ pub async fn symbol_resolve(req: &McpRequest, args: &serde_json::Value, ctx: &Mc
     McpResponse::tool_text(req.id.clone(), serde_json::to_string_pretty(&results).unwrap_or_default())
 }
 
-// ─── nav.call_graph ──────────────────────────────────────────────────────────
+// ─── nav_call_graph ──────────────────────────────────────────────────────────
 
 pub async fn call_graph(req: &McpRequest, args: &serde_json::Value, ctx: &McpContext) -> McpResponse {
     let symbol = match args.get("symbol").and_then(|v| v.as_str()) {

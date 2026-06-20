@@ -12,15 +12,15 @@ It provides tools to Claude Code that understand your local project: semantic se
 - [CLI Commands](#cli-commands)
 - [Configuration](#configuration)
 - [MCP Tools](#mcp-tools)
-  - [rag.search](#ragsearch)
-  - [rag.get_chunks](#ragget_chunks)
-  - [rag.get_file_ranges](#ragget_file_ranges)
-  - [rag.index_status](#ragindex_status)
-  - [rag.ensure_index](#ragensure_index)
-  - [nav.symbol_resolve](#navsymbol_resolve)
-  - [nav.call_graph](#navcall_graph)
-  - [impact.analyze](#impactanalyze)
-  - [context.bundle](#contextbundle)
+  - [rag_search](#ragsearch)
+  - [rag_get_chunks](#ragget_chunks)
+  - [rag_get_file_ranges](#ragget_file_ranges)
+  - [rag_index_status](#ragindex_status)
+  - [rag_ensure_index](#ragensure_index)
+  - [nav_symbol_resolve](#navsymbol_resolve)
+  - [nav_call_graph](#navcall_graph)
+  - [impact_analyze](#impactanalyze)
+  - [context_bundle](#contextbundle)
 - [Manual Testing (JSON-RPC)](#manual-testing-json-rpc)
 - [Environment Variables](#environment-variables)
 - [Troubleshooting](#troubleshooting)
@@ -188,8 +188,8 @@ exclude_dirs = [
 # ─── MCP ─────────────────────────────────────────────────────────────────────
 
 [mcp]
-context_chunks       = 6      # rag.search default result count
-bundle_budget_tokens = 6000   # context.bundle max tokens
+context_chunks       = 6      # rag_search default result count
+bundle_budget_tokens = 6000   # context_bundle max tokens
 
 # ─── File Watcher ────────────────────────────────────────────────────────────
 
@@ -201,7 +201,7 @@ debounce_ms = 500    # batch multiple changes after this delay
 
 [symbol_graph]
 enabled   = true   # write symbol, import, and call graph to SQLite
-max_depth = 3      # max dependency depth for impact.analyze
+max_depth = 3      # max dependency depth for impact_analyze
 ```
 
 ---
@@ -213,7 +213,7 @@ Claude Code calls these tools automatically; to test manually, see the [Manual T
 
 ---
 
-### `rag.search`
+### `rag_search`
 
 Performs semantic search across the project codebase.
 
@@ -246,7 +246,7 @@ Performs semantic search across the project codebase.
 ]
 ```
 
-`snippet` contains at most 400 characters. Use `rag.get_chunks` for full content.
+`snippet` contains at most 400 characters. Use `rag_get_chunks` for full content.
 
 **Examples:**
 
@@ -262,17 +262,17 @@ Performs semantic search across the project codebase.
 
 ---
 
-### `rag.get_chunks`
+### `rag_get_chunks`
 
-Retrieves full content using `chunk_id` values returned from `rag.search`.
+Retrieves full content using `chunk_id` values returned from `rag_search`.
 
-**When to use:** When the `rag.search` snippet isn't sufficient; to read the full code block.
+**When to use:** When the `rag_search` snippet isn't sufficient; to read the full code block.
 
 **Parameters:**
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `chunk_ids` | string[] | ✓ | `chunk_id` values from the `rag.search` response |
+| `chunk_ids` | string[] | ✓ | `chunk_id` values from the `rag_search` response |
 | `max_chars` | integer | — | Maximum characters per chunk (default: 2000) |
 
 **Response:**
@@ -292,7 +292,7 @@ Retrieves full content using `chunk_id` values returned from `rag.search`.
 
 ---
 
-### `rag.get_file_ranges`
+### `rag_get_file_ranges`
 
 Reads specific line ranges or symbol definitions from a file.
 
@@ -336,7 +336,7 @@ Returns `"error": "not found"` if the symbol is not found.
 
 ---
 
-### `rag.index_status`
+### `rag_index_status`
 
 Returns index statistics and project status.
 
@@ -355,11 +355,11 @@ Git commit:    a3f9c12
 Dirty files:   0
 ```
 
-If `Dirty files` is greater than 0, call `rag.ensure_index`.
+If `Dirty files` is greater than 0, call `rag_ensure_index`.
 
 ---
 
-### `rag.ensure_index`
+### `rag_ensure_index`
 
 Re-indexes changed files.
 
@@ -384,7 +384,7 @@ Re-indexes changed files.
 
 ---
 
-### `nav.symbol_resolve`
+### `nav_symbol_resolve`
 
 Finds where a symbol (function, struct, class, etc.) is defined and returns call graph edges.
 
@@ -421,7 +421,7 @@ If multiple symbols share the same name (overloads/different files), all are lis
 
 ---
 
-### `nav.call_graph`
+### `nav_call_graph`
 
 Returns the call graph around a symbol: what it calls (BFS, up to depth) and who calls it (1 hop).
 
@@ -453,7 +453,7 @@ Returns the call graph around a symbol: what it calls (BFS, up to depth) and who
 
 ---
 
-### `impact.analyze`
+### `impact_analyze`
 
 Calculates which files and symbols would be affected when the given symbols or files are modified.
 
@@ -492,7 +492,7 @@ Calculates which files and symbols would be affected when the given symbols or f
 
 ---
 
-### `context.bundle`
+### `context_bundle`
 
 Prepares a token-budgeted complete context bundle for a task in a single call.
 
@@ -556,24 +556,24 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 echo '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
   | ragpilot --mcp-server
 
-# rag.index_status
-echo '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"rag.index_status","arguments":{}}}' \
+# rag_index_status
+echo '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"rag_index_status","arguments":{}}}' \
   | ragpilot --mcp-server
 
-# rag.search
-echo '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"rag.search","arguments":{"query":"config loading","k":3}}}' \
+# rag_search
+echo '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"rag_search","arguments":{"query":"config loading","k":3}}}' \
   | ragpilot --mcp-server
 
-# rag.search with filters
-echo '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"rag.search","arguments":{"query":"embed function","filters":{"language":"rust"}}}}' \
+# rag_search with filters
+echo '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"rag_search","arguments":{"query":"embed function","filters":{"language":"rust"}}}}' \
   | ragpilot --mcp-server
 
-# nav.symbol_resolve
-echo '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"nav.symbol_resolve","arguments":{"symbol":"compute_hash"}}}' \
+# nav_symbol_resolve
+echo '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"nav_symbol_resolve","arguments":{"symbol":"compute_hash"}}}' \
   | ragpilot --mcp-server
 
-# context.bundle
-echo '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"context.bundle","arguments":{"task":"Understand the Qdrant search implementation","budget_tokens":4000}}}' \
+# context_bundle
+echo '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"context_bundle","arguments":{"task":"Understand the Qdrant search implementation","budget_tokens":4000}}}' \
   | ragpilot --mcp-server
 ```
 
@@ -665,8 +665,8 @@ Make sure JSON is on a single line and ends with `\n`. Extra `}` or `{` characte
 
 ```bash
 # Wrong (extra }} present):
-echo '{"method":"tools/call","params":{"name":"rag.index_status","arguments":{}}}'
+echo '{"method":"tools/call","params":{"name":"rag_index_status","arguments":{}}}'
 
 # Correct:
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"rag.index_status","arguments":{}}}'
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"rag_index_status","arguments":{}}}'
 ```

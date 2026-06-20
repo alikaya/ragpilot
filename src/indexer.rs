@@ -788,7 +788,7 @@ pub async fn cmd_stats() -> Result<()> {
         println!("│ {:<LW$} │ {:<VW$} │", label, v);
     };
 
-    println!("{}", "RAG Stats — last context.bundle".bold());
+    println!("{}", "RAG Stats — last context_bundle".bold());
     match &state.last_bundle_token_stats {
         Some(s) => {
             let at = s
@@ -822,7 +822,7 @@ pub async fn cmd_stats() -> Result<()> {
             );
         }
         None => {
-            println!("No context.bundle stats recorded yet.");
+            println!("No context_bundle stats recorded yet.");
         }
     }
     Ok(())

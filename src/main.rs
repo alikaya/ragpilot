@@ -10,6 +10,7 @@ mod watcher;
 mod mcp;
 mod wizard;
 mod semantic_diff;
+mod agents;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -53,13 +54,14 @@ async fn main() -> anyhow::Result<()> {
                  \n\
                  Usage:\n\
                    ragpilot --mcp-server              Start MCP server (stdio)\n\
-                   ragpilot init <folder> <agent>     Init project + agent config (codex|claude)\n\
+                   ragpilot init <folder> <agent>     Init project + agent config\n\
+                                                     agents: claude codex cursor vscode opencode windsurf antigravity all\n\
                    ragpilot init [--force]            Index current project\n\
                    ragpilot setup <folder> <agent>    Alias for 'ragpilot init <folder> <agent>'\n\
                    ragpilot update                 Re-index changed files\n\
                    ragpilot status                 Show index statistics\n\
 \n\
-                   ragpilot stats                  Show last context.bundle token savings\n\
+                   ragpilot stats                  Show last context_bundle token savings\n\
                    ragpilot skeleton <file>        Print a token-efficient skeleton of a file\n\
                    ragpilot review [<ref>]         Semantic diff: changed symbols + blast radius\n\
 \n\
@@ -250,7 +252,7 @@ async fn cmd_doctor() -> anyhow::Result<()> {
     let mcp_settings = root.join(".claude/settings.json");
     let mcp_ok = mcp_settings.exists() && {
         std::fs::read_to_string(&mcp_settings)
-            .map(|c| c.contains("rag") && c.contains("mcp-server"))
+            .map(|c| c.contains("ragpilot") && c.contains("mcp-server"))
             .unwrap_or(false)
     };
     check("Claude Code MCP registration (.claude/settings.json)", mcp_ok);
@@ -259,7 +261,7 @@ async fn cmd_doctor() -> anyhow::Result<()> {
     println!("  ragpilot init     Index the project");
     println!("  ragpilot hooks    Install git hooks");
     println!("  Add to .claude/settings.json:");
-    println!(r#"    {{"mcpServers":{{"rag":{{"type":"stdio","command":"ragpilot","args":["--mcp-server"]}}}}}}"#);
+    println!(r#"    {{"mcpServers":{{"ragpilot":{{"type":"stdio","command":"ragpilot","args":["--mcp-server"]}}}}}}"#);
 
     Ok(())
 }
@@ -280,11 +282,11 @@ async fn cmd_setup(args: &[String]) -> anyhow::Result<()> {
 
     let folder = match args.get(2) {
         Some(f) => f.clone(),
-        None    => anyhow::bail!("Usage: ragpilot setup <folder> <agent>\n  Agents: codex, claude"),
+        None    => anyhow::bail!("Usage: ragpilot setup <folder> <agent>\n  Agents: claude, codex, cursor, vscode, opencode, windsurf, antigravity, all"),
     };
     let agent = match args.get(3) {
         Some(a) => a.clone(),
-        None    => anyhow::bail!("Usage: ragpilot setup <folder> <agent>\n  Agents: codex, claude"),
+        None    => anyhow::bail!("Usage: ragpilot setup <folder> <agent>\n  Agents: claude, codex, cursor, vscode, opencode, windsurf, antigravity, all"),
     };
 
     // Resolve absolute path
@@ -331,15 +333,9 @@ async fn cmd_setup(args: &[String]) -> anyhow::Result<()> {
         println!("{} .rag/config.toml (already exists)", "i".blue());
     }
 
-    // Agent-specific config files
-    match agent.to_lowercase().as_str() {
-        "codex"  => write_codex_files(&root)?,
-        "claude" => write_claude_files(&root)?,
-        other => anyhow::bail!(
-            "Unknown agent '{}'. Supported agents: codex, claude",
-            other
-        ),
-    }
+    // Agent-specific MCP registration (claude, codex, cursor, vscode,
+    // windsurf, antigravity, or "all").
+    agents::configure(&agent, &root)?;
 
     // Switch cwd so cmd_init / cmd_hooks pick up the right root
     std::env::set_current_dir(&root)?;
@@ -361,86 +357,7 @@ async fn cmd_setup(args: &[String]) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn write_codex_files(root: &std::path::Path) -> anyhow::Result<()> {
-    use colored::Colorize;
-
-    // .codex/config.toml — proje yolu dinamik olarak eklenir
-    let codex_dir    = root.join(".codex");
-    let codex_config = codex_dir.join("config.toml");
-    std::fs::create_dir_all(&codex_dir)?;
-    if !codex_config.exists() {
-        let root_str = root.canonicalize()
-            .unwrap_or_else(|_| root.to_path_buf())
-            .to_string_lossy()
-            .to_string();
-        let content = format!(
-            "[projects.\"{}\"]\ntrust_level = \"trusted\"\n\n\
-             [mcp_servers.rag]\ncommand = \"ragpilot\"\nargs    = [\"--mcp-server\"]\n\n\
-             # Güvenlik için sadece bu projede aktif\ntrusted = true\n",
-            root_str
-        );
-        std::fs::write(&codex_config, content)?;
-        println!("{} .codex/config.toml", "✓".green());
-    } else {
-        println!("{} .codex/config.toml (already exists)", "i".blue());
-    }
-
-    // AGENTS.md
-    let agents_md = root.join("AGENTS.md");
-    if !agents_md.exists() {
-        std::fs::write(&agents_md, AGENTS_MD)?;
-        println!("{} AGENTS.md", "✓".green());
-    } else {
-        println!("{} AGENTS.md (already exists)", "i".blue());
-    }
-
-    Ok(())
-}
-
 // ─── Static file content ──────────────────────────────────────────────────────
-
-fn write_claude_files(root: &std::path::Path) -> anyhow::Result<()> {
-    use colored::Colorize;
-
-    // .mcp.json — merge if exists, create if not
-    let mcp_json_path = root.join(".mcp.json");
-    let rag_entry = serde_json::json!({
-        "type":    "stdio",
-        "command": "ragpilot",
-        "args":    ["--mcp-server"]
-    });
-
-    if mcp_json_path.exists() {
-        let raw = std::fs::read_to_string(&mcp_json_path)?;
-        let mut json: serde_json::Value = serde_json::from_str(&raw)
-            .unwrap_or_else(|_| serde_json::json!({}));
-
-        if json.pointer("/mcpServers/rag").is_some() {
-            println!("{} .mcp.json (rag already registered)", "i".blue());
-        } else {
-            json["mcpServers"]["rag"] = rag_entry;
-            std::fs::write(&mcp_json_path, serde_json::to_string_pretty(&json)?)?;
-            println!("{} .mcp.json (rag MCP server added)", "✓".green());
-        }
-    } else {
-        let content = serde_json::json!({
-            "mcpServers": { "rag": rag_entry }
-        });
-        std::fs::write(&mcp_json_path, serde_json::to_string_pretty(&content)?)?;
-        println!("{} .mcp.json", "✓".green());
-    }
-
-    // CLAUDE.md
-    let claude_md = root.join("CLAUDE.md");
-    if !claude_md.exists() {
-        std::fs::write(&claude_md, CLAUDE_MD)?;
-        println!("{} CLAUDE.md", "✓".green());
-    } else {
-        println!("{} CLAUDE.md (already exists)", "i".blue());
-    }
-
-    Ok(())
-}
 
 
 const AGENTS_MD: &str = r#"# AGENT EXECUTION POLICY — RAG-FIRST
@@ -454,9 +371,9 @@ Tüm keşif ve analiz işlemleri MCP üzerinden yapılmalıdır.
 
 Her görev başlangıcında:
 
-1. `rag.index_status` çağır.
+1. `rag_index_status` çağır.
 2. Eğer `Dirty files > 0` ise:
-   → `rag.ensure_index` çağır.
+   → `rag_ensure_index` çağır.
 3. Index güncel olmadan analiz yapma.
 
 ────────────────────────────────────────────────────
@@ -465,16 +382,16 @@ Her görev başlangıcında:
 
 Görev başında:
 
-→ `context.bundle(task, budget_tokens)` çağır.
+→ `context_bundle(task, budget_tokens)` çağır.
 
 Dosyaları manuel açma.
-`rag.search` tek başına yeterli değilse `context.bundle` tercih edilir.
+`rag_search` tek başına yeterli değilse `context_bundle` tercih edilir.
 
 Dosya tamamını okumak YASAKTIR.
 Gerekirse sadece:
-→ `rag.get_file_ranges`
+→ `rag_get_file_ranges`
 veya
-→ `rag.get_chunks`
+→ `rag_get_chunks`
 kullanılabilir.
 
 ────────────────────────────────────────────────────
@@ -483,8 +400,8 @@ kullanılabilir.
 
 Bir fonksiyon/class hakkında bilgi gerekiyorsa:
 
-1. `nav.symbol_resolve`
-2. `nav.call_graph`
+1. `nav_symbol_resolve`
+2. `nav_call_graph`
 
 Çağrı grafiği çıkarılmadan refactor planı yapılmaz.
 
@@ -494,7 +411,7 @@ Bir fonksiyon/class hakkında bilgi gerekiyorsa:
 
 Refactor yapılacaksa:
 
-1. `impact.analyze`
+1. `impact_analyze`
 2. Breaking signals kontrol edilir.
 3. Etkilenen dosyalar listelenir.
 4. Ardından değişiklik yapılır.
@@ -519,7 +436,7 @@ Her zaman MCP araçları kullanılmalıdır.
 
 Bağlam toplarken:
 
-- Maksimum 6000 token (context.bundle default)
+- Maksimum 6000 token (context_bundle default)
 - Gereksiz tekrar yok
 - Aynı sorgu tekrar edilmez
 
@@ -550,15 +467,15 @@ Mevcut araçlar:
 
 | Araç | Amaç |
 |------|------|
-| `rag.index_status` | Index durumu ve dirty dosya sayısı |
-| `rag.ensure_index` | Değişen dosyaları yeniden indexle |
-| `rag.search` | Semantik kod arama |
-| `rag.get_chunks` | Chunk ID ile tam içerik getir |
-| `rag.get_file_ranges` | Belirli satır aralıkları veya sembol tanımları |
-| `nav.symbol_resolve` | Sembol tanımı + çağrı grafı |
-| `nav.call_graph` | BFS çağrı ağacı (gelen + giden) |
-| `impact.analyze` | Refactor öncesi etki analizi |
-| `context.bundle` | Token bütçeli eksiksiz bağlam paketi |
+| `rag_index_status` | Index durumu ve dirty dosya sayısı |
+| `rag_ensure_index` | Değişen dosyaları yeniden indexle |
+| `rag_search` | Semantik kod arama |
+| `rag_get_chunks` | Chunk ID ile tam içerik getir |
+| `rag_get_file_ranges` | Belirli satır aralıkları veya sembol tanımları |
+| `nav_symbol_resolve` | Sembol tanımı + çağrı grafı |
+| `nav_call_graph` | BFS çağrı ağacı (gelen + giden) |
+| `impact_analyze` | Refactor öncesi etki analizi |
+| `context_bundle` | Token bütçeli eksiksiz bağlam paketi |
 
 ────────────────────────────────────────────────────
 
@@ -566,9 +483,9 @@ Mevcut araçlar:
 
 Her görev başlangıcında:
 
-1. `rag.index_status` çağır.
+1. `rag_index_status` çağır.
 2. Eğer `Dirty files > 0` ise:
-   → `rag.ensure_index` çağır.
+   → `rag_ensure_index` çağır.
 3. Index güncel olmadan analiz yapma.
 
 ────────────────────────────────────────────────────
@@ -577,16 +494,16 @@ Her görev başlangıcında:
 
 Görev başında:
 
-→ `context.bundle(task, budget_tokens)` çağır.
+→ `context_bundle(task, budget_tokens)` çağır.
 
 Dosyaları manuel açma.
-`rag.search` tek başına yeterli değilse `context.bundle` tercih edilir.
+`rag_search` tek başına yeterli değilse `context_bundle` tercih edilir.
 
 Dosya tamamını okumak YASAKTIR.
 Gerekirse sadece:
-→ `rag.get_file_ranges`
+→ `rag_get_file_ranges`
 veya
-→ `rag.get_chunks`
+→ `rag_get_chunks`
 kullanılabilir.
 
 ────────────────────────────────────────────────────
@@ -595,8 +512,8 @@ kullanılabilir.
 
 Bir fonksiyon/class hakkında bilgi gerekiyorsa:
 
-1. `nav.symbol_resolve`
-2. `nav.call_graph`
+1. `nav_symbol_resolve`
+2. `nav_call_graph`
 
 Çağrı grafiği çıkarılmadan refactor planı yapılmaz.
 
@@ -606,7 +523,7 @@ Bir fonksiyon/class hakkında bilgi gerekiyorsa:
 
 Refactor yapılacaksa:
 
-1. `impact.analyze`
+1. `impact_analyze`
 2. Breaking signals kontrol edilir.
 3. Etkilenen dosyalar listelenir.
 4. Ardından değişiklik yapılır.
@@ -631,7 +548,7 @@ Her zaman MCP araçları kullanılmalıdır.
 
 Bağlam toplarken:
 
-- Maksimum 6000 token (context.bundle default)
+- Maksimum 6000 token (context_bundle default)
 - Gereksiz tekrar yok
 - Aynı sorgu tekrar edilmez
 

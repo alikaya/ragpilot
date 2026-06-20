@@ -13,7 +13,7 @@ use tiktoken_rs::CoreBPE;
 
 pub fn tool_definitions() -> Vec<serde_json::Value> {
     vec![json!({
-        "name": "context.bundle",
+        "name": "context_bundle",
         "description": "Single call to get a complete, token-budgeted context package for a task. Combines semantic search results, relevant symbols, impact summary, and a project tree snapshot. Call this FIRST before any other tool.",
         "inputSchema": {
             "type": "object",

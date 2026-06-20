@@ -2,7 +2,7 @@
 
 RAG (Retrieval-Augmented Generation) MCP server for local codebases.
 
-Provides tools to AI agents like Claude Code and Codex that help them understand your project: semantic search, symbol navigation, impact analysis, and context bundling.
+Provides tools to AI agents — Claude Code, Codex, Cursor, VS Code, opencode, Antigravity, and Windsurf — that help them understand your project: semantic search, symbol navigation, impact analysis, and context bundling.
 
 ---
 
@@ -15,7 +15,7 @@ Provides tools to AI agents like Claude Code and Codex that help them understand
 - **Incremental indexing** — Re-index only changed files
 - **Real-time watching** — Automatically detect file changes while the MCP server is running
 - **Multiple embeddings** — Local (fastembed) or API (OpenAI, Cohere, Jina)
-- **Agent setup** — One-command setup for Claude Code and Codex with `ragpilot setup`
+- **Multi-client setup** — One-command MCP registration for Claude Code, Codex, Cursor, VS Code, and opencode (plus paste-in snippets for the global-only Windsurf & Antigravity CLI) via `ragpilot init <dir> <agent>`
 
 ---
 
@@ -34,7 +34,7 @@ When reading files without context optimization, a typical codebase snapshot qui
 | **Full `src/` Directory (24 files)** | 38,415 tokens |
 
 ### 2. Context Bundling Efficiency (A/B Test)
-We simulated **5 distinct coding tasks** (ranging from minor bug fixes to large structural refactoring) comparing standard file dumping against `ragpilot`'s `context.bundle` tool:
+We simulated **5 distinct coding tasks** (ranging from minor bug fixes to large structural refactoring) comparing standard file dumping against `ragpilot`'s `context_bundle` tool:
 
 | Scenario / Task Scope | Context Reduction (Compression) |
 | :--- | :--- |
@@ -75,16 +75,23 @@ sudo cp target/release/ragpilot /usr/local/bin/ragpilot
 ```bash
 cd /your/project
 
-# Index the project
+# Index the project only
 ragpilot init
 
-# Use as a Claude Code MCP server
-# .claude/settings.json is automatically configured
-ragpilot setup . claude
+# Index + register the MCP server with a specific agent:
+ragpilot init . claude      # Claude Code  → .mcp.json + CLAUDE.md
+ragpilot init . codex       # Codex        → .codex/config.toml + AGENTS.md
+ragpilot init . cursor      # Cursor       → .cursor/mcp.json + AGENTS.md
+ragpilot init . vscode      # VS Code      → .vscode/mcp.json + AGENTS.md
+ragpilot init . opencode    # opencode     → opencode.json + AGENTS.md
 
-# For Codex
-ragpilot setup . codex
+# Register every supported client at once
+ragpilot init . all
 ```
+
+> `setup` is an alias for `init <folder> <agent>`, so `ragpilot setup . claude` works too.
+
+See [Supported MCP Clients](#supported-mcp-clients) for the full list, including the global-only clients (Windsurf, Antigravity).
 
 ### Manual MCP Registration
 
@@ -104,11 +111,33 @@ Add to `.claude/settings.json`:
 
 ---
 
+## Supported MCP Clients
+
+`ragpilot init <dir> <agent>` writes the correct config for each client in its own format. Each client discovers MCP servers differently — `ragpilot` handles the per-client root key and entry shape automatically, and migrates any older `rag` entry to `ragpilot`.
+
+| `<agent>` | Config file written | MCP key | Scope |
+|-----------|---------------------|---------|-------|
+| `claude` | `.mcp.json` + `CLAUDE.md` | `mcpServers` | project |
+| `codex` | `.codex/config.toml` + `AGENTS.md` | `[mcp_servers.ragpilot]` | project |
+| `cursor` | `.cursor/mcp.json` + `AGENTS.md` | `mcpServers` | project |
+| `vscode` | `.vscode/mcp.json` + `AGENTS.md` | `servers` | project |
+| `opencode` | `opencode.json` + `AGENTS.md` | `mcp` (command array) | project |
+| `windsurf` | `~/.codeium/windsurf/mcp_config.json` | `mcpServers` | **global** |
+| `antigravity` | `~/.gemini/config/mcp_config.json` | `mcpServers` | **global** |
+| `all` | every project client + both global snippets | — | — |
+
+**Global-only clients** (Windsurf, Antigravity CLI/IDE) keep their config in `$HOME` and would affect every project, so `ragpilot` never writes outside the repo for them — it prints a ready-to-paste snippet and the exact file path instead.
+
+> **Gemini CLI** was retired on 2026-06-18 in favour of the **Antigravity CLI** (binary `agy`). `gemini` is still accepted as a deprecated alias and is redirected to `antigravity`. Antigravity CLI and IDE 2.0 share `~/.gemini/config/mcp_config.json`; the CLI-only path is `~/.gemini/antigravity-cli/mcp_config.json`.
+
+---
+
 ## CLI Commands
 
 | Command | Description |
 |---------|-------------|
-| `ragpilot setup <folder> <agent>` | Create project + agent configuration (`codex` \| `claude`) |
+| `ragpilot init <folder> <agent>` | Index + register the MCP server for an agent (`claude` \| `codex` \| `cursor` \| `vscode` \| `opencode` \| `windsurf` \| `antigravity` \| `all`) |
+| `ragpilot setup <folder> <agent>` | Alias for `ragpilot init <folder> <agent>` |
 | `ragpilot init [--force]` | Index the project for the first time |
 | `ragpilot update` | Re-index changed files |
 | `ragpilot status` | Show index statistics |
@@ -139,15 +168,15 @@ AI agents use these tools automatically:
 
 | Tool | Description |
 |------|-------------|
-| `rag.search` | Semantic code search (filter by: path, language, extension) |
-| `rag.get_chunks` | Retrieve full content by chunk ID |
-| `rag.get_file_ranges` | Read specific line ranges or symbol definitions |
-| `rag.index_status` | Index status and dirty file count |
-| `rag.ensure_index` | Re-index changed files |
-| `nav.symbol_resolve` | Symbol definition + call graph |
-| `nav.call_graph` | BFS call tree (incoming + outgoing) |
-| `impact.analyze` | Pre-refactor impact analysis |
-| `context.bundle` | Token-budgeted complete context bundle |
+| `rag_search` | Semantic code search (filter by: path, language, extension) |
+| `rag_get_chunks` | Retrieve full content by chunk ID |
+| `rag_get_file_ranges` | Read specific line ranges or symbol definitions |
+| `rag_index_status` | Index status and dirty file count |
+| `rag_ensure_index` | Re-index changed files |
+| `nav_symbol_resolve` | Symbol definition + call graph |
+| `nav_call_graph` | BFS call tree (incoming + outgoing) |
+| `impact_analyze` | Pre-refactor impact analysis |
+| `context_bundle` | Token-budgeted complete context bundle |
 
 ---
 
@@ -181,7 +210,7 @@ debounce_ms = 500
 
 [symbol_graph]
 enabled   = true
-max_depth = 3         # impact.analyze BFS depth
+max_depth = 3         # impact_analyze BFS depth
 ```
 
 ### Supported Embedding Models
@@ -200,13 +229,19 @@ max_depth = 3         # impact.analyze BFS depth
 ```
 src/
   main.rs              CLI dispatcher
+  agents.rs            Per-client MCP registration (claude/codex/cursor/vscode/opencode/…)
+  wizard.rs            Interactive language/dir detection for init
   config.rs            TOML configuration structs
   indexer.rs           File scanning, chunking, hash detection
   orchestrator.rs      Indexing engine that coordinates all stores
   watcher.rs           Real-time file watcher (notify v6)
+  semantic_diff.rs     Symbol-level diff + blast radius (review command)
+  skeleton.rs          Token-efficient file skeletons
+  tokens.rs            Token estimation
   parser/
     mod.rs             Symbol/import/call data structures
     regex_parser.rs    Language-specific regex parser
+    tree_sitter_parser.rs  Tree-sitter Rust parser (regex fallback)
   embedder/
     mod.rs             Embedder trait + factory
     local.rs           fastembed wrapper
@@ -222,13 +257,16 @@ src/
     mod.rs             stdio JSON-RPC server loop
     protocol.rs        McpRequest / McpResponse
     tools/
-      mod.rs           McpContext + dispatch
-      rag.rs           rag.* tools
-      nav.rs           nav.* tools
-      impact.rs        impact.* tools
-      context.rs       context.bundle
-      index.rs         rag.index_status + rag.ensure_index
+      mod.rs           McpContext + dispatch (underscore tool names)
+      rag.rs           rag_search / rag_get_chunks / rag_get_file_ranges / rag_get_skeleton
+      nav.rs           nav_symbol_resolve / nav_call_graph
+      impact.rs        impact_analyze
+      context.rs       context_bundle
+      index.rs         rag_index_status + rag_ensure_index
+      review.rs        review_semantic_diff
 ```
+
+> **Note on tool names:** MCP tools use underscores (e.g. `rag_search`), not dots. Some clients (Antigravity/Gemini, Copilot, Cursor) reject or silently drop names containing dots. Legacy dotted names are still accepted by the dispatcher for backward compatibility.
 
 ---
 

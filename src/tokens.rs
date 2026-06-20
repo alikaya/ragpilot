@@ -1,6 +1,6 @@
 //! Shared token estimation using the cl100k_base (tiktoken) tokenizer —
 //! the same tokenizer the saving metrics use, so counts are comparable
-//! across tools (context.bundle, rag.get_skeleton, ...).
+//! across tools (context_bundle, rag_get_skeleton, ...).
 
 use std::sync::OnceLock;
 use tiktoken_rs::CoreBPE;

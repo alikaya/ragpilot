@@ -106,7 +106,7 @@ fn detect(root: &Path) -> (BTreeMap<String, usize>, Vec<String>) {
 }
 
 fn prompt_languages(ext_counts: &BTreeMap<String, usize>, detected: &[bool]) -> Vec<String> {
-    println!("\n{}", "İndekslenecek diller:".bold());
+    println!("\n{}", "Languages to index:".bold());
     for (i, (name, exts)) in LANGUAGES.iter().enumerate() {
         let mark = if detected[i] { "✓".green() } else { " ".normal() };
         let n_files: usize = exts
@@ -114,7 +114,7 @@ fn prompt_languages(ext_counts: &BTreeMap<String, usize>, detected: &[bool]) -> 
             .map(|e| ext_counts.get(*e).copied().unwrap_or(0))
             .sum();
         let hint = if n_files > 0 {
-            format!(" ({n_files} dosya)")
+            format!(" ({n_files} files)")
         } else {
             String::new()
         };
@@ -131,7 +131,7 @@ fn prompt_languages(ext_counts: &BTreeMap<String, usize>, detected: &[bool]) -> 
     let default_langs: Vec<usize> = (0..LANGUAGES.len()).filter(|&i| detected[i]).collect();
     let def_str = numbers(&default_langs);
     let input = read_line(&format!(
-        "Seçim (numaraları boşlukla ayır) [varsayılan: {}]: ",
+        "Selection (space-separated numbers) [default: {}]: ",
         if def_str.is_empty() { "—".into() } else { def_str }
     ));
 
@@ -150,8 +150,8 @@ fn prompt_languages(ext_counts: &BTreeMap<String, usize>, detected: &[bool]) -> 
 }
 
 fn prompt_dirs(detected: &[String]) -> Vec<String> {
-    println!("\n{}", "İndekslenecek dizinler:".bold());
-    println!("  [ 1] {}", "(tüm proje kökü)".dimmed());
+    println!("\n{}", "Directories to index:".bold());
+    println!("  [ 1] {}", "(entire project root)".dimmed());
     for (i, d) in detected.iter().enumerate() {
         println!("  [{:>2}] {}/", i + 2, d);
     }
@@ -163,7 +163,7 @@ fn prompt_dirs(detected: &[String]) -> Vec<String> {
         (1..=detected.len()).collect()
     };
     let input = read_line(&format!(
-        "Seçim [varsayılan: {}]: ",
+        "Selection [default: {}]: ",
         numbers(&default_sel)
     ));
 
@@ -199,7 +199,7 @@ fn auto_choices(
     if extensions.is_empty() {
         eprintln!(
             "{}",
-            "ragpilot: bilinen kaynak dosyası saptanamadı; varsayılan rs/toml/md kullanılıyor."
+            "ragpilot: no known source files detected; defaulting to rs/toml/md."
                 .yellow()
         );
         extensions = vec!["rs".into(), "toml".into(), "md".into()];
