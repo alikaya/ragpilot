@@ -4,6 +4,42 @@ All notable changes to **ragpilot** are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/) and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-06-20
+
+### Added
+- **Multi-client MCP registration** (`src/agents.rs`) — one command,
+  `ragpilot init <dir> <agent>`, writes the correct config in each client's
+  own format: `claude` (`.mcp.json`), `codex` (`.codex/config.toml`),
+  `cursor` (`.cursor/mcp.json`), `vscode` (`.vscode/mcp.json`, root key
+  `servers`), and `opencode` (`opencode.json`, root key `mcp` with a command
+  array). `all` registers every project client at once.
+- **Antigravity CLI support** — Google retired the Gemini CLI on 2026-06-18 in
+  favour of the Antigravity CLI (binary `agy`). `antigravity` is now a
+  first-class target; `gemini` is accepted as a deprecated alias that
+  redirects to it. Antigravity and Windsurf are global-only, so `init` prints
+  a ready-to-paste snippet and the exact `$HOME` path instead of writing
+  outside the repo.
+
+### Changed
+- **Underscore tool names** — all MCP tools were renamed from dotted to
+  underscored form (`rag.search` → `rag_search`, `context.bundle` →
+  `context_bundle`, etc.). Several clients (Antigravity/Gemini, Copilot,
+  Cursor) reject or silently drop names containing dots, which left their tool
+  lists empty. The dispatcher normalizes any legacy dotted name to its
+  underscore form, so older configs keep working.
+- **`initialize` echoes the client's `protocolVersion`** so strict newer
+  clients negotiate cleanly, falling back to a known-good version otherwise.
+- **English init/setup prompts** — the interactive language/directory
+  questions shown during `init` are now in English.
+- README and `docs/USAGE.md` updated for the new clients, the underscore tool
+  names, and the Gemini → Antigravity migration.
+
+### Fixed
+- The registered MCP command and server key are now always `ragpilot`, never
+  `rag`. Existing configs written by older versions (`.mcp.json`,
+  `.codex/config.toml`) are migrated from the legacy `rag` key/command to
+  `ragpilot` in place.
+
 ## [0.2.0] - 2026-06-18
 
 ### Added
