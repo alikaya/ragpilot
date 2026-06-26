@@ -42,10 +42,12 @@ impl IndexOrchestrator {
         project_tree: Arc<ProjectTreeStore>,
         impact_index: Arc<ImpactIndexStore>,
     ) -> Self {
+        // Per-project query overrides live under `.rag/queries/<lang>/`.
+        let parser = Arc::new(TreeSitterParser::with_query_overrides(&root.join(".rag/queries")));
         Self {
             config, root, embedder, vector_store,
             symbol_graph, project_tree, impact_index,
-            parser: Arc::new(TreeSitterParser::new()),
+            parser,
         }
     }
 
