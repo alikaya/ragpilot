@@ -40,10 +40,10 @@ direction of the project. It is indicative and may evolve.
 
 ## M4 — Interoperability, packaging, security & outreach
 
-- Any-MCP-client documentation, presets, minimal open-source reference agent
+- Documentation for using RagPilot from MCP-compatible clients + preset configs
 - Packaging & distribution (static binaries, Nix/AUR/Homebrew, container)
 - Documentation site (usage, architecture, privacy/deployment spectrum)
-- External security review + threat model
+- Security threat model + hardening checklist + documented review readiness
 - Dissemination and community onboarding
 
 ## Later / ideas
