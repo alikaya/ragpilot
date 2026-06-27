@@ -1,6 +1,10 @@
-# ragpilot
+<p align="center">
+  <img src="logo.png" alt="ragpilot logo" width="200">
+</p>
 
-RAG (Retrieval-Augmented Generation) MCP server for local codebases.
+<h1 align="center">ragpilot</h1>
+
+<p align="center">RAG (Retrieval-Augmented Generation) MCP server for local codebases.</p>
 
 Provides tools to AI agents — Claude Code, Codex, Cursor, VS Code, opencode, Antigravity, and Windsurf — that help them understand your project: semantic search, symbol navigation, impact analysis, and context bundling.
 
@@ -10,6 +14,7 @@ Provides tools to AI agents — Claude Code, Codex, Cursor, VS Code, opencode, A
 
 - **Semantic search** — Vector-based code search with Qdrant + fastembed
 - **Symbol graph** — Function/struct/class definitions, import and call relationships
+- **Multi-language parsing** — Tree-sitter symbol & call extraction for Rust, Python, JavaScript, TypeScript, Go, Java, C, C++, C#, Ruby and PHP (regex fallback for other languages); queries live in `queries/<lang>/*.scm` and can be overridden per project under `.rag/queries/`
 - **Impact analysis** — Show which files would be affected before refactoring
 - **Context bundling** — Complete context in a single call with token budgeting
 - **Incremental indexing** — Re-index only changed files
@@ -21,29 +26,20 @@ Provides tools to AI agents — Claude Code, Codex, Cursor, VS Code, opencode, A
 
 ## 📊 Performance & Token Efficiency
 
-`ragpilot` is designed with a strict focus on token budgeting and cost efficiency. Instead of dumping the entire codebase into the LLM context (context bloating), it uses intelligent semantic filtering and impact analysis to bundle only what is strictly necessary.
+`ragpilot` is built around token budgeting: instead of dumping whole files into the LLM context, it bundles only the chunks a task needs. The numbers below come from a **reproducible benchmark** — [`benchmark/run_benchmark.sh`](benchmark/run_benchmark.sh) — that runs ten scenarios (search, `context_bundle`, symbol navigation, impact analysis, skeletons, incremental indexing) three times each and writes `results.json` + `report.md` + raw outputs. Point it at any indexed project.
 
-Here are the **empirical benchmark results** measured using real-world tasks and the `cl100k_base` (tiktoken) tokenizer:
+Measured on two codebases with the local `bge-small` model:
 
-### 1. Baseline Token Footprint
-When reading files without context optimization, a typical codebase snapshot quickly exhausts token limits:
+| Codebase | Files | `context_bundle` saving (aggregate) | Per-task range | 1-file re-index |
+| :--- | :--- | :--- | :--- | :--- |
+| **ragpilot** (this repo · Rust) | 31 | **6.0x** — 80–85% fewer tokens | 5.2x–6.72x | ~287 ms |
+| **NewPortal** (Nuxt + Rust app) | 213 | **9.12x** — 89% fewer tokens | 3.98x–23.85x | ~272 ms |
 
-| Scope | Token Count (tiktoken) |
-| :--- | :--- |
-| **4 Key Source Files** | 15,741 tokens |
-| **Full `src/` Directory (24 files)** | 38,415 tokens |
+- **Semantic search** lands on the right file (e.g. a Qdrant query → `src/store/qdrant.rs`, 0.81 cosine).
+- **Skeletons** cut large code files by **84–93%** (signatures kept, bodies elided).
+- **Incremental indexing** re-embeds only changed files — a no-op scan is ~240 ms.
 
-### 2. Context Bundling Efficiency (A/B Test)
-We simulated **5 distinct coding tasks** (ranging from minor bug fixes to large structural refactoring) comparing standard file dumping against `ragpilot`'s `context_bundle` tool:
-
-| Scenario / Task Scope | Context Reduction (Compression) |
-| :--- | :--- |
-| **Per-task Average Reduction** | **4.77x fewer tokens** |
-| **Total Cumulative Reduction** | **4.86x fewer tokens** |
-| **Peak Efficiency** *(Large tasks touching heavy files)* | **7.33x fewer tokens** |
-| **Minimum Efficiency** *(Small tasks already isolated to 2 files)* | **1.45x fewer tokens** |
-
-> 💡 **Key Finding:** Token savings are dynamic and scale with the complexity of the query. While minor isolated tasks achieve a steady **1.45x** reduction, complex structural modifications touching multiple subsystems scale up to a **7.33x** reduction in context size. This directly translates to faster AI response times and up to a **70-80% drop in LLM API costs**.
+> 💡 **How to read this:** the full-file baseline is an **upper bound** (the tokens an agent would spend reading every relevant file whole), so absolute ratios are optimistic and shift with codebase size, language mix, and embedding model. Per task the ratio tracks *how much* context a task retrieves, not its label — it is **not strictly monotonic**. See [`benchmark/report.md`](benchmark/report.md) for full methodology and caveats.
 
 ---
 
@@ -62,7 +58,7 @@ docker run -d -p 6334:6334 qdrant/qdrant
 ## Installation
 
 ```bash
-git clone https://github.com/kullanici/ragpilot
+git clone https://github.com/alikaya/ragpilot
 cd ragpilot
 cargo build --release
 sudo cp target/release/ragpilot /usr/local/bin/ragpilot
@@ -240,8 +236,8 @@ src/
   tokens.rs            Token estimation
   parser/
     mod.rs             Symbol/import/call data structures
-    regex_parser.rs    Language-specific regex parser
-    tree_sitter_parser.rs  Tree-sitter Rust parser (regex fallback)
+    regex_parser.rs    Language-specific regex parser (fallback)
+    tree_sitter_parser.rs  Multi-language tree-sitter parser (tags.scm engine, 11 languages)
   embedder/
     mod.rs             Embedder trait + factory
     local.rs           fastembed wrapper
@@ -264,6 +260,8 @@ src/
       context.rs       context_bundle
       index.rs         rag_index_status + rag_ensure_index
       review.rs        review_semantic_diff
+queries/               Per-language tree-sitter queries (.scm) — embedded, overridable via .rag/queries/
+benchmark/             Reproducible performance / token-efficiency harness (run_benchmark.sh)
 ```
 
 > **Note on tool names:** MCP tools use underscores (e.g. `rag_search`), not dots. Some clients (Antigravity/Gemini, Copilot, Cursor) reject or silently drop names containing dots. Legacy dotted names are still accepted by the dispatcher for backward compatibility.

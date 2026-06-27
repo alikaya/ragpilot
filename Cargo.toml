@@ -2,6 +2,13 @@
 name = "ragpilot"
 version = "0.3.0"
 edition = "2021"
+description = "Token-efficient, local-first code intelligence layer for AI coding agents over the Model Context Protocol (MCP)"
+license = "MIT"
+authors = ["Ali Kaya <alikayaa@gmail.com>"]
+repository = "https://github.com/alikaya/ragpilot"
+readme = "README.md"
+keywords = ["mcp", "rag", "code-search", "embeddings", "ai-agents"]
+categories = ["development-tools", "command-line-utilities"]
 
 [[bin]]
 name = "ragpilot"
