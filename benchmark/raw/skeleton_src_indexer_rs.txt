@@ -1,0 +1,215 @@
+use anyhow::{Context, Result};
+use chrono::{DateTime, Utc};
+use indicatif::{ProgressBar, ProgressStyle};
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use walkdir::WalkDir;
+
+use crate::config::{Config, IndexingConfig};
+use crate::embedder::Embedder;
+use crate::store::{Chunk, VectorStore};
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SkipStats {
+    #[serde(default)]
+    pub large_file: usize,
+    #[serde(default)]
+    pub binary: usize,
+    #[serde(default)]
+    pub minified: usize,
+    #[serde(default)]
+    pub excluded_dir: usize,
+    #[serde(default)]
+    pub unsupported_extension: usize,
+}
+
+impl SkipStats {
+    pub fn total(&self) -> usize {
+        ...
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct BundleTokenStats {
+    #[serde(default)]
+    pub task: String,
+    pub generated_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub duration_ms: u128,
+    #[serde(default)]
+    pub estimated_tokens: usize,
+    /// Honest baseline: cost of reading the matched files whole (no-RAG case).
+    #[serde(default)]
+    pub full_file_baseline_tokens: usize,
+    #[serde(default)]
+    pub saving_vs_full_file_tokens: usize,
+    #[serde(default)]
+    pub saving_vs_full_file_percent: f64,
+    #[serde(default)]
+    pub saving_ratio: f64,
+    #[serde(default)]
+    pub candidate_chunks_estimated_tokens: usize,
+    #[serde(default)]
+    pub selected_chunks_estimated_tokens: usize,
+    /// Tuning-only: fraction of retrieved chunks dropped by the budget cap.
+    #[serde(default)]
+    pub budget_trim_percent: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct IndexState {
+    pub indexed_at: Option<DateTime<Utc>>,
+    pub file_hashes: HashMap<String, String>,
+    pub total_chunks: usize,
+    pub total_files: usize,
+    pub embedding_model: String,
+    pub embedding_provider: String,
+    #[serde(default)]
+    pub skipped: SkipStats,
+    #[serde(default)]
+    pub last_bundle_token_stats: Option<BundleTokenStats>,
+}
+
+pub struct IndexRunLock {
+    path: PathBuf,
+}
+
+impl Drop for IndexRunLock {
+    fn drop(&mut self) {
+        ...
+    }
+}
+
+pub fn try_acquire_index_lock(root: &Path) -> Result<IndexRunLock> {
+    ...
+}
+
+impl IndexState {
+    pub fn load(path: &Path) -> Result<Self> {
+        ...
+    }
+
+    pub fn save(&self, path: &Path) -> Result<()> {
+        ...
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ScanReport {
+    pub files: Vec<PathBuf>,
+    pub skipped: SkipStats,
+}
+
+pub fn scan_files_with_report(root: &Path, config: &IndexingConfig) -> Result<ScanReport> {
+    ...
+}
+
+pub fn scan_files(root: &Path, config: &IndexingConfig) -> Result<Vec<PathBuf>> {
+    ...
+}
+
+fn scan_files_from(
+    start: &Path,
+    root: &Path,
+    config: &IndexingConfig,
+    files: &mut Vec<PathBuf>,
+    skipped: &mut SkipStats,
+) -> Result<()> {
+    ...
+}
+
+fn looks_binary(data: &[u8]) -> bool {
+    ...
+}
+
+fn looks_minified(path: &Path, data: &[u8]) -> bool {
+    ...
+}
+
+pub fn chunk_text(content: &str, chunk_size: usize, overlap: usize) -> Vec<(String, usize, usize)> {
+    ...
+}
+
+pub fn extract_symbol(content: &str, language: &str) -> Option<String> {
+    ...
+}
+
+pub fn file_language(extension: &str) -> &'static str {
+    ...
+}
+
+pub fn content_type_for(extension: &str) -> &'static str {
+    ...
+}
+
+pub fn compute_hash(content: &str) -> String {
+    ...
+}
+
+pub async fn index_project(
+    root: &Path,
+    config: &Config,
+    embedder: &dyn Embedder,
+    store: &dyn VectorStore,
+    force: bool,
+) -> Result<IndexState> {
+    ...
+}
+
+pub async fn index_file(
+    root: &Path,
+    file_path: &Path,
+    config: &Config,
+    embedder: &dyn Embedder,
+    store: &dyn VectorStore,
+    state: &mut IndexState,
+) -> Result<()> {
+    ...
+}
+
+fn current_root() -> Result<PathBuf> {
+    ...
+}
+
+/// A unicode block-bar scaled so `value == max` fills `width` cells.
+/// A non-zero value always shows at least one cell.
+fn bar(value: usize, max: usize, width: usize) -> String {
+    ...
+}
+
+/// Truncate to `max` chars with an ellipsis, keeping the tail of file paths
+/// (the meaningful part) rather than the leading directories.
+fn ellipsize(s: &str, max: usize) -> String {
+    ...
+}
+
+fn resolve_store(config: &Config) -> Result<crate::store::qdrant::QdrantStore> {
+    ...
+}
+
+fn build_orchestrator(root: &PathBuf, config: &Config) -> Result<crate::orchestrator::IndexOrchestrator> {
+    ...
+}
+
+pub async fn cmd_init(force: bool) -> Result<()> {
+    ...
+}
+
+pub async fn cmd_update() -> Result<()> {
+    ...
+}
+
+pub async fn cmd_status() -> Result<()> {
+    ...
+}
+
+pub async fn cmd_stats() -> Result<()> {
+    ...
+}
+
+pub async fn cmd_clean(yes: bool) -> Result<()> {
+    ...
+}
+── rust | full 7126 tok → skeleton 1214 tok (5.87x reduction)

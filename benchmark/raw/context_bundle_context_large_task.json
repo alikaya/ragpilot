@@ -1,0 +1,381 @@
+{
+  "approx_tokens_used": 1896,
+  "budget_trim_percent": 0.0,
+  "candidate_chunks_estimated_tokens": 679,
+  "estimated_tokens": 1896,
+  "full_file_baseline_tokens": 12748,
+  "impact_summary": "No downstream dependents detected.",
+  "rag_chunks": [
+    {
+      "chunk_id": "src/mcp/tools/rag.rs:10",
+      "end_line": 166,
+      "language": "rust",
+      "path": "src/mcp/tools/rag.rs",
+      "score": 0.7789999842643738,
+      "snippet": "(req.id.clone(), \"No embedding produced\".into()),\n    };\n\n    let results = match ctx.store.search(&query_vec, SearchFilters { path_glob, language, limit }).await {\n        Ok(r)  => r,\n        Err(e) => return McpResponse::tool_error(req.id.clone(), format!(\"Search error: {e}\")),\n    };\n\n    if results.is_empty() {\n        return McpResponse::tool_text(req.id.clone(),\n            \"No results foun…",
+      "start_line": 150
+    },
+    {
+      "chunk_id": "src/mcp/tools/context.rs:3",
+      "end_line": 62,
+      "language": "rust",
+      "path": "src/mcp/tools/context.rs",
+      "score": 0.7409999966621399,
+      "snippet": ".embed(&[task.clone()]).await.unwrap_or_default();\n    let rag_chunks = if let Some(vec) = embeddings.into_iter().next() {\n        let limit = ctx\n            .config\n            .mcp\n            .context_chunks\n            .min(ctx.config.mcp.max_context_chunks)\n            .max(1) as u64;\n        ctx.store.search(&vec, SearchFilters { limit, ..Default::default() }).await.unwrap_or_default()\n    …",
+      "start_line": 45
+    },
+    {
+      "chunk_id": "src/mcp/tools/context.rs:0",
+      "end_line": 17,
+      "language": "rust",
+      "path": "src/mcp/tools/context.rs",
+      "score": 0.7269999980926514,
+      "snippet": "use serde_json::json;\nuse std::collections::{HashMap, HashSet};\nuse std::sync::OnceLock;\nuse std::time::Instant;\n\nuse super::McpContext;\nuse crate::config::Config;\nuse crate::indexer::{file_language, BundleTokenStats, IndexState};\nuse crate::mcp::protocol::{McpRequest, McpResponse};\nuse crate::store::SearchFilters;\nuse super::rag::format_result;\nuse tiktoken_rs::CoreBPE;\n\npub fn tool_definitions()…",
+      "start_line": 1,
+      "symbol": "pub fn tool_definitions"
+    },
+    {
+      "chunk_id": "src/indexer.rs:21",
+      "end_line": 445,
+      "language": "rust",
+      "path": "src/indexer.rs",
+      "score": 0.7269999980926514,
+      "snippet": "content, config.indexing.chunk_size, config.indexing.chunk_overlap);\n        let chunk_total = raw_chunks.len();\n\n        if raw_chunks.is_empty() {\n            state.file_hashes.insert(rel_str, hash);\n            pb.inc(1);\n            continue;\n        }\n\n        let texts: Vec<String> = raw_chunks.iter().map(|(t, _, _)| t.clone()).collect();\n        let vectors = embedder.embed(&texts).await.wi…",
+      "start_line": 427
+    }
+  ],
+  "saving_ratio": 6.72,
+  "saving_vs_full_file_percent": 85.13,
+  "saving_vs_full_file_tokens": 10852,
+  "selected_chunks_estimated_tokens": 679,
+  "symbols": [
+    {
+      "kind": "function",
+      "line": 11,
+      "path": "src/mcp/tools/rag.rs",
+      "symbol": "tool_definitions"
+    },
+    {
+      "kind": "function",
+      "line": 81,
+      "path": "src/mcp/tools/rag.rs",
+      "symbol": "get_skeleton"
+    },
+    {
+      "kind": "function",
+      "line": 125,
+      "path": "src/mcp/tools/rag.rs",
+      "symbol": "search"
+    },
+    {
+      "kind": "function",
+      "line": 171,
+      "path": "src/mcp/tools/rag.rs",
+      "symbol": "format_result"
+    },
+    {
+      "kind": "function",
+      "line": 188,
+      "path": "src/mcp/tools/rag.rs",
+      "symbol": "clamp_str"
+    },
+    {
+      "kind": "function",
+      "line": 196,
+      "path": "src/mcp/tools/rag.rs",
+      "symbol": "get_chunks"
+    },
+    {
+      "kind": "function",
+      "line": 226,
+      "path": "src/mcp/tools/rag.rs",
+      "symbol": "get_file_ranges"
+    },
+    {
+      "kind": "function",
+      "line": 279,
+      "path": "src/mcp/tools/rag.rs",
+      "symbol": "find_symbol_range"
+    },
+    {
+      "kind": "function",
+      "line": 295,
+      "path": "src/mcp/tools/rag.rs",
+      "symbol": "has_dirty_files"
+    },
+    {
+      "kind": "function",
+      "line": 14,
+      "path": "src/mcp/tools/context.rs",
+      "symbol": "tool_definitions"
+    },
+    {
+      "kind": "function",
+      "line": 29,
+      "path": "src/mcp/tools/context.rs",
+      "symbol": "bundle"
+    },
+    {
+      "kind": "function",
+      "line": 222,
+      "path": "src/mcp/tools/context.rs",
+      "symbol": "approx_tokens"
+    },
+    {
+      "kind": "function",
+      "line": 226,
+      "path": "src/mcp/tools/context.rs",
+      "symbol": "estimate_tokens_for_text"
+    },
+    {
+      "kind": "function",
+      "line": 242,
+      "path": "src/mcp/tools/context.rs",
+      "symbol": "is_code_language"
+    },
+    {
+      "kind": "function",
+      "line": 246,
+      "path": "src/mcp/tools/context.rs",
+      "symbol": "is_probably_turkish"
+    },
+    {
+      "kind": "function",
+      "line": 252,
+      "path": "src/mcp/tools/context.rs",
+      "symbol": "estimate_tokens_with_tokenizer"
+    },
+    {
+      "kind": "static",
+      "line": 253,
+      "path": "src/mcp/tools/context.rs",
+      "symbol": "CL100K"
+    },
+    {
+      "kind": "impl",
+      "line": 28,
+      "path": "src/indexer.rs",
+      "symbol": "SkipStats"
+    },
+    {
+      "kind": "function",
+      "line": 29,
+      "path": "src/indexer.rs",
+      "symbol": "total"
+    },
+    {
+      "kind": "struct",
+      "line": 35,
+      "path": "src/indexer.rs",
+      "symbol": "BundleTokenStats"
+    },
+    {
+      "kind": "impl",
+      "line": 79,
+      "path": "src/indexer.rs",
+      "symbol": "IndexRunLock"
+    },
+    {
+      "kind": "function",
+      "line": 80,
+      "path": "src/indexer.rs",
+      "symbol": "drop"
+    },
+    {
+      "kind": "function",
+      "line": 85,
+      "path": "src/indexer.rs",
+      "symbol": "try_acquire_index_lock"
+    },
+    {
+      "kind": "impl",
+      "line": 103,
+      "path": "src/indexer.rs",
+      "symbol": "IndexState"
+    },
+    {
+      "kind": "function",
+      "line": 104,
+      "path": "src/indexer.rs",
+      "symbol": "load"
+    },
+    {
+      "kind": "function",
+      "line": 113,
+      "path": "src/indexer.rs",
+      "symbol": "save"
+    },
+    {
+      "kind": "struct",
+      "line": 124,
+      "path": "src/indexer.rs",
+      "symbol": "ScanReport"
+    },
+    {
+      "kind": "function",
+      "line": 129,
+      "path": "src/indexer.rs",
+      "symbol": "scan_files_with_report"
+    },
+    {
+      "kind": "function",
+      "line": 149,
+      "path": "src/indexer.rs",
+      "symbol": "scan_files"
+    },
+    {
+      "kind": "function",
+      "line": 153,
+      "path": "src/indexer.rs",
+      "symbol": "scan_files_from"
+    },
+    {
+      "kind": "function",
+      "line": 234,
+      "path": "src/indexer.rs",
+      "symbol": "looks_binary"
+    },
+    {
+      "kind": "function",
+      "line": 244,
+      "path": "src/indexer.rs",
+      "symbol": "looks_minified"
+    },
+    {
+      "kind": "function",
+      "line": 259,
+      "path": "src/indexer.rs",
+      "symbol": "chunk_text"
+    },
+    {
+      "kind": "function",
+      "line": 292,
+      "path": "src/indexer.rs",
+      "symbol": "extract_symbol"
+    },
+    {
+      "kind": "function",
+      "line": 327,
+      "path": "src/indexer.rs",
+      "symbol": "file_language"
+    },
+    {
+      "kind": "function",
+      "line": 357,
+      "path": "src/indexer.rs",
+      "symbol": "content_type_for"
+    },
+    {
+      "kind": "function",
+      "line": 365,
+      "path": "src/indexer.rs",
+      "symbol": "compute_hash"
+    },
+    {
+      "kind": "function",
+      "line": 369,
+      "path": "src/indexer.rs",
+      "symbol": "index_project"
+    },
+    {
+      "kind": "function",
+      "line": 478,
+      "path": "src/indexer.rs",
+      "symbol": "index_file"
+    },
+    {
+      "kind": "function",
+      "line": 543,
+      "path": "src/indexer.rs",
+      "symbol": "current_root"
+    },
+    {
+      "kind": "function",
+      "line": 549,
+      "path": "src/indexer.rs",
+      "symbol": "bar"
+    },
+    {
+      "kind": "function",
+      "line": 562,
+      "path": "src/indexer.rs",
+      "symbol": "ellipsize"
+    },
+    {
+      "kind": "function",
+      "line": 571,
+      "path": "src/indexer.rs",
+      "symbol": "resolve_store"
+    },
+    {
+      "kind": "function",
+      "line": 577,
+      "path": "src/indexer.rs",
+      "symbol": "build_orchestrator"
+    },
+    {
+      "kind": "function",
+      "line": 600,
+      "path": "src/indexer.rs",
+      "symbol": "cmd_init"
+    },
+    {
+      "kind": "function",
+      "line": 645,
+      "path": "src/indexer.rs",
+      "symbol": "cmd_update"
+    },
+    {
+      "kind": "function",
+      "line": 669,
+      "path": "src/indexer.rs",
+      "symbol": "cmd_status"
+    },
+    {
+      "kind": "function",
+      "line": 776,
+      "path": "src/indexer.rs",
+      "symbol": "cmd_stats"
+    },
+    {
+      "kind": "const",
+      "line": 782,
+      "path": "src/indexer.rs",
+      "symbol": "LW"
+    },
+    {
+      "kind": "const",
+      "line": 783,
+      "path": "src/indexer.rs",
+      "symbol": "VW"
+    },
+    {
+      "kind": "function",
+      "line": 831,
+      "path": "src/indexer.rs",
+      "symbol": "cmd_clean"
+    }
+  ],
+  "tree_snapshot": [
+    "src/agents.rs",
+    "src/config.rs",
+    "src/embedder/api.rs",
+    "src/embedder/local.rs",
+    "src/embedder/mod.rs",
+    "src/indexer.rs",
+    "src/main.rs",
+    "src/mcp/mod.rs",
+    "src/mcp/protocol.rs",
+    "src/orchestrator.rs",
+    "src/parser/mod.rs",
+    "src/parser/regex_parser.rs",
+    "src/parser/tree_sitter_parser.rs",
+    "src/semantic_diff.rs",
+    "src/skeleton.rs",
+    "src/store/impact_index.rs",
+    "src/store/mod.rs",
+    "src/store/project_tree.rs",
+    "src/store/qdrant.rs",
+    "src/store/sqlite.rs"
+  ]
+}

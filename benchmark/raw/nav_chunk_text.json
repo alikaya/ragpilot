@@ -1,0 +1,68 @@
+[
+  {
+    "called_by": [
+      {
+        "line": 427,
+        "path": "src/indexer.rs",
+        "symbol": "index_project"
+      },
+      {
+        "line": 504,
+        "path": "src/indexer.rs",
+        "symbol": "index_file"
+      },
+      {
+        "line": 115,
+        "path": "src/orchestrator.rs",
+        "symbol": "reindex_file"
+      }
+    ],
+    "calls": [
+      {
+        "line": 260,
+        "symbol": "chars"
+      },
+      {
+        "line": 260,
+        "symbol": "collect"
+      },
+      {
+        "line": 267,
+        "symbol": "count"
+      },
+      {
+        "line": 267,
+        "symbol": "filter"
+      },
+      {
+        "line": 267,
+        "symbol": "iter"
+      },
+      {
+        "line": 261,
+        "symbol": "len"
+      },
+      {
+        "line": 275,
+        "symbol": "min"
+      },
+      {
+        "line": 271,
+        "symbol": "new"
+      },
+      {
+        "line": 281,
+        "symbol": "push"
+      },
+      {
+        "line": 264,
+        "symbol": "vec"
+      }
+    ],
+    "end_line": 290,
+    "kind": "function",
+    "path": "src/indexer.rs",
+    "start_line": 259,
+    "symbol": "chunk_text"
+  }
+]

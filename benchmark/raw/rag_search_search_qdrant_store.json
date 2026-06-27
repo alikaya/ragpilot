@@ -1,0 +1,61 @@
+[
+  {
+    "chunk_id": "src/store/qdrant.rs:6",
+    "end_line": 125,
+    "language": "rust",
+    "path": "src/store/qdrant.rs",
+    "score": 0.8080000281333923,
+    "snippet": "h\":    chunk.file_hash,\n                \"content_type\": chunk.content_type,\n                \"language\":     chunk.language,\n                \"symbol\":       chunk.symbol.as_deref().unwrap_or(\"\"),\n            }))\n            .unwrap_or_default();\n\n            PointStruct::new(point_id, vec.clone(), payload)\n        }).collect();\n\n        self.client.upsert_points(\n            UpsertPointsBuilder::ne…",
+    "start_line": 105,
+    "symbol": "async fn search"
+  },
+  {
+    "chunk_id": "src/store/qdrant.rs:0",
+    "end_line": 24,
+    "language": "rust",
+    "path": "src/store/qdrant.rs",
+    "score": 0.7889999747276306,
+    "snippet": "use anyhow::{anyhow, Result};\nuse async_trait::async_trait;\nuse qdrant_client::{\n    Payload, Qdrant,\n    qdrant::{\n        Condition, CreateCollectionBuilder, DeletePointsBuilder, Distance, Filter,\n        PointStruct, QueryPointsBuilder, ScrollPointsBuilder, UpsertPointsBuilder,\n        VectorParamsBuilder, vectors_config::Config as VectorsConfigInner,\n    },\n};\nuse serde_json::json;\nuse uuid::U…",
+    "start_line": 1,
+    "symbol": "pub struct QdrantStore"
+  },
+  {
+    "chunk_id": "src/store/qdrant.rs:4",
+    "end_line": 95,
+    "language": "rust",
+    "path": "src/store/qdrant.rs",
+    "score": 0.7549999952316284,
+    "snippet": "dy exists\", self.collection);\n                return Ok(());\n            }\n            Err(_) => {}\n        }\n\n        tracing::info!(\"Creating collection '{}' with dim={}\", self.collection, dim);\n        self.client.create_collection(\n            CreateCollectionBuilder::new(&self.collection)\n                .vectors_config(VectorParamsBuilder::new(dim, Distance::Cosine))\n        )\n        .await…",
+    "start_line": 73,
+    "symbol": "async fn upsert_chunks"
+  },
+  {
+    "chunk_id": "src/store/qdrant.rs:1",
+    "end_line": 39,
+    "language": "rust",
+    "path": "src/store/qdrant.rs",
+    "score": 0.7519999742507935,
+    "snippet": "ew(config: &QdrantConfig) -> Result<Self> {\n        let mut builder = Qdrant::from_url(&config.url);\n        if let Some(ref key) = config.api_key {\n            builder = builder.api_key(key.clone());\n        }\n        let client = builder.build()\n            .map_err(|e| anyhow!(\"Failed to connect to Qdrant: {e}\"))?;\n        let collection = config.collection\n            .clone()\n            .unw…",
+    "start_line": 23,
+    "symbol": "fn payload_to_chunk"
+  },
+  {
+    "chunk_id": "src/indexer.rs:23",
+    "end_line": 486,
+    "language": "rust",
+    "path": "src/indexer.rs",
+    "score": 0.7279999852180481,
+    "snippet": ".with_context(|| format!(\"Upsert failed for {}\", rel_str))?;\n\n        state.file_hashes.insert(rel_str, hash);\n        total_new_chunks += chunk_total;\n        files_indexed += 1;\n        pb.inc(1);\n    }\n\n    pb.finish_with_message(format!(\"Indexed {} files, {} new chunks\", files_indexed, total_new_chunks));\n\n    state.indexed_at = Some(Utc::now());\n    state.total_files = state.file_hashes.len()…",
+    "start_line": 460,
+    "symbol": "pub async fn index_file"
+  },
+  {
+    "chunk_id": "src/orchestrator.rs:14",
+    "end_line": 236,
+    "language": "rust",
+    "path": "src/orchestrator.rs",
+    "score": 0.7269999980926514,
+    "snippet": "ndexer::scan_files_with_report(&self.root, &self.config.indexing)?;\n        let files = scan.files;\n        let total = files.len();\n\n        let pb = if show_progress {\n            let bar = ProgressBar::new(total as u64);\n            bar.set_style(\n                ProgressStyle::default_bar()\n                    .template(\"[{elapsed_precise}] {bar:40.cyan/blue} {pos}/{len} {msg}\")\n              …",
+    "start_line": 215
+  }
+]

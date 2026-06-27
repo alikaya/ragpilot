@@ -1,0 +1,17 @@
+─── ragpilot doctor ────────────────────────────
+  ✓  Config file exists
+  ✓  State file exists
+  ✓  SQLite stores exist
+  ✓  Qdrant reachable (http://localhost:6334)
+
+─── Resource Warnings ───────────────────────────
+  ✓  'ragpilot' binary in PATH
+  ✓  Git repository
+  ✓  Git hooks installed (run 'ragpilot hooks')
+  ✗  Claude Code MCP registration (.claude/settings.json)
+
+─── Quick Fix ──────────────────────────────────
+  ragpilot init     Index the project
+  ragpilot hooks    Install git hooks
+  Add to .claude/settings.json:
+    {"mcpServers":{"ragpilot":{"type":"stdio","command":"ragpilot","args":["--mcp-server"]}}}

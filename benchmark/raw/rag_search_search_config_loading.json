@@ -1,0 +1,58 @@
+[
+  {
+    "chunk_id": "src/indexer.rs:31",
+    "end_line": 623,
+    "language": "rust",
+    "path": "src/indexer.rs",
+    "score": 0.7129999995231628,
+    "snippet": " must NOT clobber a user-customized config.\n    if !config_path.exists() {\n        std::fs::create_dir_all(&rag_dir)?;\n        let project_name = root\n            .file_name()\n            .map(|n| n.to_string_lossy().to_string())\n            .unwrap_or_else(|| \"project\".to_string());\n        let choices = crate::wizard::configure(&root);\n        std::fs::write(\n            &config_path,\n          …",
+    "start_line": 608
+  },
+  {
+    "chunk_id": "src/config.rs:16",
+    "end_line": 354,
+    "language": "rust",
+    "path": "src/config.rs",
+    "score": 0.6869999766349792,
+    "snippet": " modules, configuration, or any\nproject-specific question. Returns relevant code snippets and docs with file paths.\n\"\"\"\n\n[watcher]\nenabled = false\ndebounce_ms = 2000\n\n[symbol_graph]\nenabled = true\nmax_depth = 2\nmax_nodes = 200\n\"#\n        )\n    }\n\n    pub fn rag_dir(root: &Path) -> PathBuf { root.join(\".rag\") }\n    pub fn state_path(root: &Path) -> PathBuf { Self::rag_dir(root).join(\"state.json\") }…",
+    "start_line": 333,
+    "symbol": "pub fn rag_dir"
+  },
+  {
+    "chunk_id": "src/config.rs:12",
+    "end_line": 262,
+    "language": "rust",
+    "path": "src/config.rs",
+    "score": 0.6840000152587891,
+    "snippet": " -> String {\n    if items.is_empty() {\n        return \"[]\".to_string();\n    }\n    let inner = items\n        .iter()\n        .map(|s| format!(\"  \\\"{}\\\"\", s.as_ref()))\n        .collect::<Vec<_>>()\n        .join(\",\\n\");\n    format!(\"[\\n{inner}\\n]\")\n}\n\nimpl Config {\n    pub fn load(path: &Path) -> Result<Self> {\n        let content = std::fs::read_to_string(path)\n            .with_context(|| format!(\"…",
+    "start_line": 239,
+    "symbol": "impl Config"
+  },
+  {
+    "chunk_id": "src/agents.rs:9",
+    "end_line": 156,
+    "language": "rust",
+    "path": "src/agents.rs",
+    "score": 0.6650000214576721,
+    "snippet": "ex_config, updated)?;\n            println!(\"{} .codex/config.toml (ragpilot added)\", \"✓\".green());\n        } else {\n            println!(\"{} .codex/config.toml (already exists)\", \"i\".blue());\n        }\n    } else {\n        let root_str = root\n            .canonicalize()\n            .unwrap_or_else(|_| root.to_path_buf())\n            .to_string_lossy()\n            .to_string();\n        let content …",
+    "start_line": 139
+  },
+  {
+    "chunk_id": "src/indexer.rs:32",
+    "end_line": 640,
+    "language": "rust",
+    "path": "src/indexer.rs",
+    "score": 0.6570000052452087,
+    "snippet": "ions.join(\", \"));\n        let dirs = if choices.include_dirs.is_empty() {\n            \"(whole project root)\".to_string()\n        } else {\n            choices.include_dirs.join(\", \")\n        };\n        println!(\"    dirs:       {dirs}\");\n    } else {\n        println!(\"{} Config already exists: {}\", \"i\".blue(), config_path.display());\n    }\n\n    let config = Config::load(&config_path)?;\n    println!…",
+    "start_line": 621
+  },
+  {
+    "chunk_id": "src/mcp/mod.rs:2",
+    "end_line": 54,
+    "language": "rust",
+    "path": "src/mcp/mod.rs",
+    "score": 0.6539999842643738,
+    "snippet": "ig = Arc::new(Config::load(&config_path)?);\n    tracing::info!(\"Loaded config for '{}'\", config.project.name);\n\n    let model_name = match config.embedding.provider.as_str() {\n        \"api\" => config.embedding.api.model.as_str(),\n        _     => config.embedding.local.model.as_str(),\n    };\n    eprintln!(\"ragpilot: loading embedding model '{model_name}'…\");\n    let embedder: Arc<dyn embedder::Emb…",
+    "start_line": 40
+  }
+]

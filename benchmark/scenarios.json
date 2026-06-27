@@ -1,0 +1,88 @@
+{
+  "meta": {
+    "description": "RagPilot benchmark scenarios. Driven by run_benchmark.sh — each scenario is executed `runs` times and timed with millisecond precision.",
+    "runs": 3,
+    "context_budget_tokens": 6000
+  },
+  "scenarios": [
+    {
+      "id": "search_config_loading",
+      "kind": "search",
+      "type": "mcp",
+      "tool": "rag_search",
+      "purpose": "Configuration loading and .rag/config.toml behaviour discovery.",
+      "args": { "query": "config loading and project configuration", "k": 6 }
+    },
+    {
+      "id": "search_qdrant_store",
+      "kind": "search",
+      "type": "mcp",
+      "tool": "rag_search",
+      "purpose": "Qdrant connection, collection creation and the search/upsert flow.",
+      "args": { "query": "Qdrant collection creation search and upsert implementation", "k": 6 }
+    },
+    {
+      "id": "context_small_task",
+      "kind": "context",
+      "type": "mcp",
+      "tool": "context_bundle",
+      "purpose": "context_bundle efficiency on a small, isolated task.",
+      "args": { "task": "Find where CLI status command reads index statistics", "budget_tokens": 6000 }
+    },
+    {
+      "id": "context_medium_task",
+      "kind": "context",
+      "type": "mcp",
+      "tool": "context_bundle",
+      "purpose": "context_bundle efficiency on a medium task.",
+      "args": { "task": "Understand how indexing detects changed files and re-indexes only dirty files", "budget_tokens": 6000 }
+    },
+    {
+      "id": "context_large_task",
+      "kind": "context",
+      "type": "mcp",
+      "tool": "context_bundle",
+      "purpose": "context_bundle token saving on a large, architectural task.",
+      "args": { "task": "Explain the full flow from rag_search request to embedding generation, Qdrant search, result formatting, and token-budgeted context delivery", "budget_tokens": 6000 }
+    },
+    {
+      "id": "symbol_navigation",
+      "kind": "nav",
+      "type": "mcp",
+      "tool": "nav_symbol_resolve",
+      "purpose": "Symbol resolution success across representative symbols.",
+      "items": ["cmd_status", "index_project", "chunk_text", "QdrantStore", "context_bundle"]
+    },
+    {
+      "id": "impact_analysis",
+      "kind": "impact",
+      "type": "mcp",
+      "tool": "impact_analyze",
+      "purpose": "Pre-refactor blast-radius analysis.",
+      "items": ["src/config.rs", "src/indexer.rs", "src/store/qdrant.rs"]
+    },
+    {
+      "id": "skeleton_efficiency",
+      "kind": "skeleton",
+      "type": "cli",
+      "tool": "skeleton",
+      "purpose": "Token reduction of `ragpilot skeleton` on large files.",
+      "items": ["src/indexer.rs", "src/config.rs", "src/mcp/tools/context.rs"]
+    },
+    {
+      "id": "incremental_index_nochange",
+      "kind": "update",
+      "type": "cli",
+      "tool": "update",
+      "purpose": "`ragpilot update` duration when nothing changed."
+    },
+    {
+      "id": "incremental_index_touch_one_file",
+      "kind": "update_touch",
+      "type": "cli",
+      "tool": "update",
+      "purpose": "Incremental indexing duration when a single file changes.",
+      "note": "config has include_dirs=[\"src\"], so the temp file is created UNDER src/ (not benchmark/) to actually be indexed; it is deleted and re-indexed away afterwards."
+    }
+  ]
+}

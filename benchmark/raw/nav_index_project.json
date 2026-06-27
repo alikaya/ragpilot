@@ -1,0 +1,204 @@
+[
+  {
+    "called_by": [],
+    "calls": [
+      {
+        "line": 475,
+        "symbol": "Ok"
+      },
+      {
+        "line": 470,
+        "symbol": "Some"
+      },
+      {
+        "line": 427,
+        "symbol": "chunk_text"
+      },
+      {
+        "line": 436,
+        "symbol": "clone"
+      },
+      {
+        "line": 436,
+        "symbol": "collect"
+      },
+      {
+        "line": 412,
+        "symbol": "compute_hash"
+      },
+      {
+        "line": 426,
+        "symbol": "content_type_for"
+      },
+      {
+        "line": 378,
+        "symbol": "default"
+      },
+      {
+        "line": 387,
+        "symbol": "default_bar"
+      },
+      {
+        "line": 422,
+        "symbol": "delete_by_source"
+      },
+      {
+        "line": 392,
+        "symbol": "dimension"
+      },
+      {
+        "line": 437,
+        "symbol": "embed"
+      },
+      {
+        "line": 393,
+        "symbol": "ensure_collection"
+      },
+      {
+        "line": 441,
+        "symbol": "enumerate"
+      },
+      {
+        "line": 424,
+        "symbol": "extension"
+      },
+      {
+        "line": 443,
+        "symbol": "extract_symbol"
+      },
+      {
+        "line": 425,
+        "symbol": "file_language"
+      },
+      {
+        "line": 468,
+        "symbol": "finish_with_message"
+      },
+      {
+        "line": 402,
+        "symbol": "format"
+      },
+      {
+        "line": 414,
+        "symbol": "get"
+      },
+      {
+        "line": 407,
+        "symbol": "inc"
+      },
+      {
+        "line": 431,
+        "symbol": "insert"
+      },
+      {
+        "line": 440,
+        "symbol": "into_iter"
+      },
+      {
+        "line": 430,
+        "symbol": "is_empty"
+      },
+      {
+        "line": 436,
+        "symbol": "iter"
+      },
+      {
+        "line": 385,
+        "symbol": "len"
+      },
+      {
+        "line": 378,
+        "symbol": "load"
+      },
+      {
+        "line": 424,
+        "symbol": "map"
+      },
+      {
+        "line": 385,
+        "symbol": "new"
+      },
+      {
+        "line": 470,
+        "symbol": "now"
+      },
+      {
+        "line": 404,
+        "symbol": "read_to_string"
+      },
+      {
+        "line": 473,
+        "symbol": "save"
+      },
+      {
+        "line": 380,
+        "symbol": "scan_files_with_report"
+      },
+      {
+        "line": 402,
+        "symbol": "set_message"
+      },
+      {
+        "line": 386,
+        "symbol": "set_style"
+      },
+      {
+        "line": 377,
+        "symbol": "state_path"
+      },
+      {
+        "line": 399,
+        "symbol": "strip_prefix"
+      },
+      {
+        "line": 388,
+        "symbol": "template"
+      },
+      {
+        "line": 424,
+        "symbol": "to_lowercase"
+      },
+      {
+        "line": 400,
+        "symbol": "to_string"
+      },
+      {
+        "line": 400,
+        "symbol": "to_string_lossy"
+      },
+      {
+        "line": 376,
+        "symbol": "try_acquire_index_lock"
+      },
+      {
+        "line": 389,
+        "symbol": "unwrap"
+      },
+      {
+        "line": 399,
+        "symbol": "unwrap_or"
+      },
+      {
+        "line": 424,
+        "symbol": "unwrap_or_default"
+      },
+      {
+        "line": 422,
+        "symbol": "unwrap_or_else"
+      },
+      {
+        "line": 460,
+        "symbol": "upsert_chunks"
+      },
+      {
+        "line": 437,
+        "symbol": "with_context"
+      }
+    ],
+    "end_line": 476,
+    "kind": "function",
+    "path": "src/indexer.rs",
+    "start_line": 369,
+    "symbol": "index_project"
+  }
+]

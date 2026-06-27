@@ -1,0 +1,59 @@
+─── Project ─────────────────────────────
+  Name:     rag-cli
+  Root:     /home/alikaya/Projects/rag-cli
+
+─── Index ───────────────────────────────
+  Last indexed: 2026-06-26 22:32:31 UTC
+  Files indexed: 31
+  Chunks:        ~570
+  Skipped files: 0
+    large file:            0
+    binary:                0
+    minified:              0
+    excluded dir:          0
+    unsupported extension: 0
+  Embedding model: BAAI/bge-small-en-v1.5 (local)
+  Dirty files:   0
+
+─── Symbols & Graph ─────────────────────
+  Symbols: 378   Calls: 2093   Imports: 271
+  By kind:
+    function  ████████████████ 251
+    struct    ██ 33
+    module    ██ 32
+    const     ██ 25
+    impl      █ 23
+    static    █ 7
+    enum      █ 4
+    trait     █ 3
+  Hot symbols (most called):
+    new                    ████████████ 81
+    open_conn              ██ 14
+    ok                     ██ 14
+    load                   ██ 13
+    tool_text              ██ 11
+    tool_error             ██ 11
+    state_path             ██ 11
+    parse                  ██ 11
+  Largest files (by symbols):
+    …/parser/tree_sitter_parser.rs ████████████ 59
+    src/config.rs                  █████████ 45
+    src/indexer.rs                 ███████ 34
+    src/main.rs                    █████ 23
+    src/semantic_diff.rs           ███ 17
+    src/embedder/api.rs            ███ 14
+    src/parser/regex_parser.rs     ███ 14
+    src/agents.rs                  ███ 13
+
+─── Qdrant ──────────────────────────────
+  URL:        http://localhost:6334
+  Collection: rag_cli
+  Points:     410
+  Dim:        384
+
+─── MCP ─────────────────────────────────
+  context_chunks:     4
+  max_context_files:  8
+  max_context_chunks: 20
+  max_context_tokens: 12000
+  Run:                ragpilot --mcp-server

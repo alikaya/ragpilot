@@ -1,0 +1,118 @@
+[
+  {
+    "called_by": [
+      {
+        "line": 36,
+        "path": "src/main.rs",
+        "symbol": "main"
+      }
+    ],
+    "calls": [
+      {
+        "line": 773,
+        "symbol": "Ok"
+      },
+      {
+        "line": 702,
+        "symbol": "as_str"
+      },
+      {
+        "line": 713,
+        "symbol": "clone"
+      },
+      {
+        "line": 754,
+        "symbol": "collection_info"
+      },
+      {
+        "line": 703,
+        "symbol": "compute_hash"
+      },
+      {
+        "line": 674,
+        "symbol": "config_path"
+      },
+      {
+        "line": 706,
+        "symbol": "count"
+      },
+      {
+        "line": 672,
+        "symbol": "current_root"
+      },
+      {
+        "line": 702,
+        "symbol": "filter"
+      },
+      {
+        "line": 735,
+        "symbol": "first"
+      },
+      {
+        "line": 715,
+        "symbol": "graph_stats"
+      },
+      {
+        "line": 695,
+        "symbol": "is_empty"
+      },
+      {
+        "line": 701,
+        "symbol": "iter"
+      },
+      {
+        "line": 702,
+        "symbol": "join"
+      },
+      {
+        "line": 674,
+        "symbol": "load"
+      },
+      {
+        "line": 727,
+        "symbol": "map"
+      },
+      {
+        "line": 674,
+        "symbol": "map_err"
+      },
+      {
+        "line": 727,
+        "symbol": "max"
+      },
+      {
+        "line": 713,
+        "symbol": "new"
+      },
+      {
+        "line": 677,
+        "symbol": "println"
+      },
+      {
+        "line": 702,
+        "symbol": "read_to_string"
+      },
+      {
+        "line": 753,
+        "symbol": "resolve_store"
+      },
+      {
+        "line": 675,
+        "symbol": "state_path"
+      },
+      {
+        "line": 711,
+        "symbol": "stores_db"
+      },
+      {
+        "line": 727,
+        "symbol": "unwrap_or"
+      }
+    ],
+    "end_line": 774,
+    "kind": "function",
+    "path": "src/indexer.rs",
+    "start_line": 669,
+    "symbol": "cmd_status"
+  }
+]

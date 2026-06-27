@@ -1,0 +1,9 @@
+{
+  "affected_files": [],
+  "affected_symbols": [],
+  "breaking_signals": [],
+  "changed_paths": [
+    "src/store/qdrant.rs"
+  ],
+  "truncated": false
+}

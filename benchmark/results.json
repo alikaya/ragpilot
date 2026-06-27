@@ -1,0 +1,396 @@
+{
+  "generated_at": "2026-06-26 22:33:30 UTC",
+  "environment": {
+    "date": "2026-06-26 22:33:30 UTC",
+    "os": "Arch Linux",
+    "cpu": "12th Gen Intel(R) Core(TM) i7-12700H",
+    "cores": "20",
+    "ram": "15Gi",
+    "binary": "/home/alikaya/.cargo/bin/ragpilot",
+    "binary_version": "ragpilot \u2014 RAG MCP Server for Claude Code",
+    "server_version": "0.2.0",
+    "qdrant": "ready (http :6333)",
+    "collection": "rag_cli",
+    "project_files": 77,
+    "indexed_files": 31,
+    "chunks": 570,
+    "model": "BAAI/bge-small-en-v1.5 (local)",
+    "runs": 3,
+    "mcp_startup_ms_avg": 253,
+    "index_init_ms": 260
+  },
+  "scenarios": [
+    {
+      "scenario": "search_config_loading",
+      "type": "mcp",
+      "command_or_tool": "rag_search",
+      "duration_ms": 276,
+      "duration_ms_min": 275,
+      "duration_ms_max": 276,
+      "runs": [
+        275,
+        276,
+        276
+      ],
+      "success": true,
+      "exit_code": 0,
+      "output_bytes": 3755,
+      "estimated_output_tokens": 939,
+      "top_paths": [
+        "src/indexer.rs",
+        "src/config.rs",
+        "src/config.rs",
+        "src/agents.rs",
+        "src/indexer.rs"
+      ],
+      "top_scores": [
+        0.713,
+        0.687,
+        0.684,
+        0.665,
+        0.657
+      ],
+      "error": null
+    },
+    {
+      "scenario": "search_qdrant_store",
+      "type": "mcp",
+      "command_or_tool": "rag_search",
+      "duration_ms": 279,
+      "duration_ms_min": 269,
+      "duration_ms_max": 298,
+      "runs": [
+        271,
+        269,
+        298
+      ],
+      "success": true,
+      "exit_code": 0,
+      "output_bytes": 3891,
+      "estimated_output_tokens": 973,
+      "top_paths": [
+        "src/store/qdrant.rs",
+        "src/store/qdrant.rs",
+        "src/store/qdrant.rs",
+        "src/store/qdrant.rs",
+        "src/indexer.rs"
+      ],
+      "top_scores": [
+        0.808,
+        0.789,
+        0.755,
+        0.752,
+        0.728
+      ],
+      "error": null
+    },
+    {
+      "scenario": "context_small_task",
+      "type": "mcp",
+      "command_or_tool": "context_bundle",
+      "duration_ms": 343,
+      "duration_ms_min": 341,
+      "duration_ms_max": 345,
+      "runs": [
+        345,
+        344,
+        341
+      ],
+      "success": true,
+      "exit_code": 0,
+      "output_bytes": 8333,
+      "estimated_output_tokens": 2084,
+      "top_paths": [
+        "src/mcp/tools/index.rs",
+        "src/mcp/tools/index.rs",
+        "src/store/symbol_graph.rs",
+        "src/main.rs"
+      ],
+      "top_scores": [
+        0.733,
+        0.721,
+        0.707,
+        0.704
+      ],
+      "error": null,
+      "task": "Find where CLI status command reads index statistics",
+      "bundle_delivered_tokens": 1613,
+      "full_file_baseline_tokens": 8381,
+      "saving_tokens": 6768,
+      "saving_percent": 80.75,
+      "saving_ratio": 5.2,
+      "budget_trim_percent": 0.0
+    },
+    {
+      "scenario": "context_medium_task",
+      "type": "mcp",
+      "command_or_tool": "context_bundle",
+      "duration_ms": 355,
+      "duration_ms_min": 321,
+      "duration_ms_max": 374,
+      "runs": [
+        369,
+        374,
+        321
+      ],
+      "success": true,
+      "exit_code": 0,
+      "output_bytes": 9336,
+      "estimated_output_tokens": 2334,
+      "top_paths": [
+        "src/indexer.rs",
+        "src/indexer.rs",
+        "src/mcp/tools/index.rs",
+        "src/orchestrator.rs"
+      ],
+      "top_scores": [
+        0.754,
+        0.748,
+        0.74,
+        0.737
+      ],
+      "error": null,
+      "task": "Understand how indexing detects changed files and re-indexes only dirty files",
+      "bundle_delivered_tokens": 1819,
+      "full_file_baseline_tokens": 10856,
+      "saving_tokens": 9037,
+      "saving_percent": 83.24,
+      "saving_ratio": 5.97,
+      "budget_trim_percent": 0.0
+    },
+    {
+      "scenario": "context_large_task",
+      "type": "mcp",
+      "command_or_tool": "context_bundle",
+      "duration_ms": 356,
+      "duration_ms_min": 344,
+      "duration_ms_max": 368,
+      "runs": [
+        355,
+        368,
+        344
+      ],
+      "success": true,
+      "exit_code": 0,
+      "output_bytes": 9834,
+      "estimated_output_tokens": 2459,
+      "top_paths": [
+        "src/mcp/tools/rag.rs",
+        "src/mcp/tools/context.rs",
+        "src/mcp/tools/context.rs",
+        "src/indexer.rs"
+      ],
+      "top_scores": [
+        0.779,
+        0.741,
+        0.727,
+        0.727
+      ],
+      "error": null,
+      "task": "Explain the full flow from rag_search request to embedding generation, Qdrant search, result formatting, and token-budgeted context delivery",
+      "bundle_delivered_tokens": 1896,
+      "full_file_baseline_tokens": 12748,
+      "saving_tokens": 10852,
+      "saving_percent": 85.13,
+      "saving_ratio": 6.72,
+      "budget_trim_percent": 0.0
+    },
+    {
+      "scenario": "symbol_navigation",
+      "type": "mcp",
+      "command_or_tool": "nav_symbol_resolve",
+      "duration_ms": 1260,
+      "duration_ms_min": 1250,
+      "duration_ms_max": 1274,
+      "runs": [
+        1274,
+        1250,
+        1257
+      ],
+      "success": true,
+      "exit_code": 0,
+      "output_bytes": 0,
+      "estimated_output_tokens": 0,
+      "top_paths": [],
+      "top_scores": [],
+      "error": null,
+      "symbols_total": 5,
+      "symbols_found": 4,
+      "items": [
+        {
+          "symbol": "cmd_status",
+          "resolved": true,
+          "paths": [
+            "src/indexer.rs"
+          ],
+          "kind": "function",
+          "duration_ms": 258
+        },
+        {
+          "symbol": "index_project",
+          "resolved": true,
+          "paths": [
+            "src/indexer.rs"
+          ],
+          "kind": "function",
+          "duration_ms": 245
+        },
+        {
+          "symbol": "chunk_text",
+          "resolved": true,
+          "paths": [
+            "src/indexer.rs"
+          ],
+          "kind": "function",
+          "duration_ms": 257
+        },
+        {
+          "symbol": "QdrantStore",
+          "resolved": true,
+          "paths": [
+            "src/store/qdrant.rs"
+          ],
+          "kind": "impl",
+          "duration_ms": 245
+        },
+        {
+          "symbol": "context_bundle",
+          "resolved": false,
+          "paths": [],
+          "kind": null,
+          "duration_ms": 255
+        }
+      ]
+    },
+    {
+      "scenario": "impact_analysis",
+      "type": "mcp",
+      "command_or_tool": "impact_analyze",
+      "duration_ms": 760,
+      "duration_ms_min": 747,
+      "duration_ms_max": 776,
+      "runs": [
+        747,
+        756,
+        776
+      ],
+      "success": true,
+      "exit_code": 0,
+      "output_bytes": 0,
+      "estimated_output_tokens": 0,
+      "top_paths": [],
+      "top_scores": [],
+      "error": null,
+      "affected_files_total": 0,
+      "items": [
+        {
+          "path": "src/config.rs",
+          "affected_files": 0,
+          "affected_symbols": 0,
+          "breaking_signals": 0,
+          "duration_ms": 263
+        },
+        {
+          "path": "src/indexer.rs",
+          "affected_files": 0,
+          "affected_symbols": 0,
+          "breaking_signals": 0,
+          "duration_ms": 250
+        },
+        {
+          "path": "src/store/qdrant.rs",
+          "affected_files": 0,
+          "affected_symbols": 0,
+          "breaking_signals": 0,
+          "duration_ms": 246
+        }
+      ]
+    },
+    {
+      "scenario": "skeleton_efficiency",
+      "type": "cli",
+      "command_or_tool": "skeleton",
+      "duration_ms": 159,
+      "duration_ms_min": 152,
+      "duration_ms_max": 170,
+      "runs": [
+        170,
+        152,
+        154
+      ],
+      "success": true,
+      "exit_code": 0,
+      "output_bytes": 0,
+      "estimated_output_tokens": 0,
+      "top_paths": [],
+      "top_scores": [],
+      "error": null,
+      "items": [
+        {
+          "file": "src/indexer.rs",
+          "full_tokens": 7287,
+          "skeleton_tokens": 1202,
+          "reduction_percent": 83.5,
+          "reduction_ratio": 6.06,
+          "duration_ms": 58
+        },
+        {
+          "file": "src/config.rs",
+          "full_tokens": 2626,
+          "skeleton_tokens": 1682,
+          "reduction_percent": 35.9,
+          "reduction_ratio": 1.56,
+          "duration_ms": 50
+        },
+        {
+          "file": "src/mcp/tools/context.rs",
+          "full_tokens": 2563,
+          "skeleton_tokens": 232,
+          "reduction_percent": 90.9,
+          "reduction_ratio": 11.05,
+          "duration_ms": 51
+        }
+      ]
+    },
+    {
+      "scenario": "incremental_index_nochange",
+      "type": "cli",
+      "command_or_tool": "update",
+      "duration_ms": 241,
+      "duration_ms_min": 232,
+      "duration_ms_max": 252,
+      "runs": [
+        239,
+        232,
+        252
+      ],
+      "success": true,
+      "exit_code": 0,
+      "output_bytes": 88,
+      "estimated_output_tokens": 22,
+      "top_paths": [],
+      "top_scores": [],
+      "error": null
+    },
+    {
+      "scenario": "incremental_index_touch_one_file",
+      "type": "cli",
+      "command_or_tool": "update",
+      "duration_ms": 287,
+      "duration_ms_min": 274,
+      "duration_ms_max": 312,
+      "runs": [
+        274,
+        312,
+        274
+      ],
+      "success": true,
+      "exit_code": 0,
+      "output_bytes": 92,
+      "estimated_output_tokens": 23,
+      "top_paths": [],
+      "top_scores": [],
+      "error": null
+    }
+  ]
+}

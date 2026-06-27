@@ -1,0 +1,359 @@
+{
+  "approx_tokens_used": 1819,
+  "budget_trim_percent": 0.0,
+  "candidate_chunks_estimated_tokens": 679,
+  "estimated_tokens": 1819,
+  "full_file_baseline_tokens": 10856,
+  "impact_summary": "No downstream dependents detected.",
+  "rag_chunks": [
+    {
+      "chunk_id": "src/indexer.rs:33",
+      "end_line": 659,
+      "language": "rust",
+      "path": "src/indexer.rs",
+      "score": 0.7540000081062317,
+      "snippet": "les indexed ({} dirty), {}ms.\",\n        \"✓\".green(), result.indexed, result.dirty_count, result.duration_ms\n    );\n    Ok(())\n}\n\npub async fn cmd_update() -> Result<()> {\n    use colored::Colorize;\n\n    let root = current_root()?;\n    let config =\n        Config::load(&Config::config_path(&root)).map_err(|_| anyhow::anyhow!(\"No .rag/config.toml found. Run 'ragpilot init' first.\"))?;\n\n    let state…",
+      "start_line": 639,
+      "symbol": "pub async fn cmd_update"
+    },
+    {
+      "chunk_id": "src/indexer.rs:34",
+      "end_line": 677,
+      "language": "rust",
+      "path": "src/indexer.rs",
+      "score": 0.7480000257492065,
+      "snippet": "rch.ensure_index_with_progress(false).await?;\n\n    if result.dirty_count == 0 {\n        println!(\"{} Already up to date — no changes detected.\", \"✓\".green());\n    } else {\n        println!(\n            \"{} Updated — {}/{} changed files re-indexed, {}ms.\",\n            \"✓\".green(), result.indexed, result.dirty_count, result.duration_ms\n        );\n    }\n    Ok(())\n}\n\npub async fn cmd_status() -> Resu…",
+      "start_line": 656,
+      "symbol": "pub async fn cmd_status"
+    },
+    {
+      "chunk_id": "src/mcp/tools/index.rs:0",
+      "end_line": 19,
+      "language": "rust",
+      "path": "src/mcp/tools/index.rs",
+      "score": 0.7400000095367432,
+      "snippet": "use serde_json::json;\n\nuse super::McpContext;\nuse crate::config::Config;\nuse crate::indexer::IndexState;\nuse crate::mcp::protocol::{McpRequest, McpResponse};\n\npub fn tool_definitions() -> Vec<serde_json::Value> {\n    vec![\n        json!({\n            \"name\": \"rag_index_status\",\n            \"description\": \"Returns RAG index statistics: files indexed, chunks, last commit, dirty file count.\",\n       …",
+      "start_line": 1,
+      "symbol": "pub fn tool_definitions"
+    },
+    {
+      "chunk_id": "src/orchestrator.rs:15",
+      "end_line": 249,
+      "language": "rust",
+      "path": "src/orchestrator.rs",
+      "score": 0.7369999885559082,
+      "snippet": "ensure_collection(dim).await?;\n\n        let mut dirty_count = 0usize;\n        let mut indexed     = 0usize;\n        let mut new_hashes  = state.file_hashes.clone();\n\n        // Remove stale entries: files that were deleted or moved outside include_dirs\n        let scanned: std::collections::HashSet<String> = files.iter()\n            .map(|p| p.strip_prefix(&self.root).unwrap_or(p).to_string_lossy(…",
+      "start_line": 233
+    }
+  ],
+  "saving_ratio": 5.97,
+  "saving_vs_full_file_percent": 83.24,
+  "saving_vs_full_file_tokens": 9037,
+  "selected_chunks_estimated_tokens": 679,
+  "symbols": [
+    {
+      "kind": "struct",
+      "line": 18,
+      "path": "src/orchestrator.rs",
+      "symbol": "EnsureIndexResult"
+    },
+    {
+      "kind": "impl",
+      "line": 35,
+      "path": "src/orchestrator.rs",
+      "symbol": "IndexOrchestrator"
+    },
+    {
+      "kind": "function",
+      "line": 36,
+      "path": "src/orchestrator.rs",
+      "symbol": "new"
+    },
+    {
+      "kind": "function",
+      "line": 55,
+      "path": "src/orchestrator.rs",
+      "symbol": "should_index"
+    },
+    {
+      "kind": "function",
+      "line": 81,
+      "path": "src/orchestrator.rs",
+      "symbol": "process_file"
+    },
+    {
+      "kind": "function",
+      "line": 109,
+      "path": "src/orchestrator.rs",
+      "symbol": "reindex_file"
+    },
+    {
+      "kind": "function",
+      "line": 192,
+      "path": "src/orchestrator.rs",
+      "symbol": "remove_file"
+    },
+    {
+      "kind": "function",
+      "line": 200,
+      "path": "src/orchestrator.rs",
+      "symbol": "ensure_index"
+    },
+    {
+      "kind": "function",
+      "line": 204,
+      "path": "src/orchestrator.rs",
+      "symbol": "ensure_index_with_progress"
+    },
+    {
+      "kind": "function",
+      "line": 208,
+      "path": "src/orchestrator.rs",
+      "symbol": "ensure_index_inner"
+    },
+    {
+      "kind": "impl",
+      "line": 28,
+      "path": "src/indexer.rs",
+      "symbol": "SkipStats"
+    },
+    {
+      "kind": "function",
+      "line": 29,
+      "path": "src/indexer.rs",
+      "symbol": "total"
+    },
+    {
+      "kind": "struct",
+      "line": 35,
+      "path": "src/indexer.rs",
+      "symbol": "BundleTokenStats"
+    },
+    {
+      "kind": "impl",
+      "line": 79,
+      "path": "src/indexer.rs",
+      "symbol": "IndexRunLock"
+    },
+    {
+      "kind": "function",
+      "line": 80,
+      "path": "src/indexer.rs",
+      "symbol": "drop"
+    },
+    {
+      "kind": "function",
+      "line": 85,
+      "path": "src/indexer.rs",
+      "symbol": "try_acquire_index_lock"
+    },
+    {
+      "kind": "impl",
+      "line": 103,
+      "path": "src/indexer.rs",
+      "symbol": "IndexState"
+    },
+    {
+      "kind": "function",
+      "line": 104,
+      "path": "src/indexer.rs",
+      "symbol": "load"
+    },
+    {
+      "kind": "function",
+      "line": 113,
+      "path": "src/indexer.rs",
+      "symbol": "save"
+    },
+    {
+      "kind": "struct",
+      "line": 124,
+      "path": "src/indexer.rs",
+      "symbol": "ScanReport"
+    },
+    {
+      "kind": "function",
+      "line": 129,
+      "path": "src/indexer.rs",
+      "symbol": "scan_files_with_report"
+    },
+    {
+      "kind": "function",
+      "line": 149,
+      "path": "src/indexer.rs",
+      "symbol": "scan_files"
+    },
+    {
+      "kind": "function",
+      "line": 153,
+      "path": "src/indexer.rs",
+      "symbol": "scan_files_from"
+    },
+    {
+      "kind": "function",
+      "line": 234,
+      "path": "src/indexer.rs",
+      "symbol": "looks_binary"
+    },
+    {
+      "kind": "function",
+      "line": 244,
+      "path": "src/indexer.rs",
+      "symbol": "looks_minified"
+    },
+    {
+      "kind": "function",
+      "line": 259,
+      "path": "src/indexer.rs",
+      "symbol": "chunk_text"
+    },
+    {
+      "kind": "function",
+      "line": 292,
+      "path": "src/indexer.rs",
+      "symbol": "extract_symbol"
+    },
+    {
+      "kind": "function",
+      "line": 327,
+      "path": "src/indexer.rs",
+      "symbol": "file_language"
+    },
+    {
+      "kind": "function",
+      "line": 357,
+      "path": "src/indexer.rs",
+      "symbol": "content_type_for"
+    },
+    {
+      "kind": "function",
+      "line": 365,
+      "path": "src/indexer.rs",
+      "symbol": "compute_hash"
+    },
+    {
+      "kind": "function",
+      "line": 369,
+      "path": "src/indexer.rs",
+      "symbol": "index_project"
+    },
+    {
+      "kind": "function",
+      "line": 478,
+      "path": "src/indexer.rs",
+      "symbol": "index_file"
+    },
+    {
+      "kind": "function",
+      "line": 543,
+      "path": "src/indexer.rs",
+      "symbol": "current_root"
+    },
+    {
+      "kind": "function",
+      "line": 549,
+      "path": "src/indexer.rs",
+      "symbol": "bar"
+    },
+    {
+      "kind": "function",
+      "line": 562,
+      "path": "src/indexer.rs",
+      "symbol": "ellipsize"
+    },
+    {
+      "kind": "function",
+      "line": 571,
+      "path": "src/indexer.rs",
+      "symbol": "resolve_store"
+    },
+    {
+      "kind": "function",
+      "line": 577,
+      "path": "src/indexer.rs",
+      "symbol": "build_orchestrator"
+    },
+    {
+      "kind": "function",
+      "line": 600,
+      "path": "src/indexer.rs",
+      "symbol": "cmd_init"
+    },
+    {
+      "kind": "function",
+      "line": 645,
+      "path": "src/indexer.rs",
+      "symbol": "cmd_update"
+    },
+    {
+      "kind": "function",
+      "line": 669,
+      "path": "src/indexer.rs",
+      "symbol": "cmd_status"
+    },
+    {
+      "kind": "function",
+      "line": 776,
+      "path": "src/indexer.rs",
+      "symbol": "cmd_stats"
+    },
+    {
+      "kind": "const",
+      "line": 782,
+      "path": "src/indexer.rs",
+      "symbol": "LW"
+    },
+    {
+      "kind": "const",
+      "line": 783,
+      "path": "src/indexer.rs",
+      "symbol": "VW"
+    },
+    {
+      "kind": "function",
+      "line": 831,
+      "path": "src/indexer.rs",
+      "symbol": "cmd_clean"
+    },
+    {
+      "kind": "function",
+      "line": 8,
+      "path": "src/mcp/tools/index.rs",
+      "symbol": "tool_definitions"
+    },
+    {
+      "kind": "function",
+      "line": 30,
+      "path": "src/mcp/tools/index.rs",
+      "symbol": "status"
+    },
+    {
+      "kind": "function",
+      "line": 80,
+      "path": "src/mcp/tools/index.rs",
+      "symbol": "ensure"
+    }
+  ],
+  "tree_snapshot": [
+    "src/agents.rs",
+    "src/config.rs",
+    "src/embedder/api.rs",
+    "src/embedder/local.rs",
+    "src/embedder/mod.rs",
+    "src/indexer.rs",
+    "src/main.rs",
+    "src/mcp/mod.rs",
+    "src/mcp/protocol.rs",
+    "src/orchestrator.rs",
+    "src/parser/mod.rs",
+    "src/parser/regex_parser.rs",
+    "src/parser/tree_sitter_parser.rs",
+    "src/semantic_diff.rs",
+    "src/skeleton.rs",
+    "src/store/impact_index.rs",
+    "src/store/mod.rs",
+    "src/store/project_tree.rs",
+    "src/store/qdrant.rs",
+    "src/store/sqlite.rs"
+  ]
+}

@@ -1,0 +1,41 @@
+use serde_json::json;
+use std::collections::{HashMap, HashSet};
+use std::sync::OnceLock;
+use std::time::Instant;
+
+use super::McpContext;
+use crate::config::Config;
+use crate::indexer::{file_language, BundleTokenStats, IndexState};
+use crate::mcp::protocol::{McpRequest, McpResponse};
+use crate::store::SearchFilters;
+use super::rag::format_result;
+use tiktoken_rs::CoreBPE;
+
+pub fn tool_definitions() -> Vec<serde_json::Value> {
+    ...
+}
+
+pub async fn bundle(req: &McpRequest, args: &serde_json::Value, ctx: &McpContext) -> McpResponse {
+    ...
+}
+
+fn approx_tokens(s: &str) -> usize {
+    ...
+}
+
+fn estimate_tokens_for_text(text: &str, language: &str) -> usize {
+    ...
+}
+
+fn is_code_language(language: &str) -> bool {
+    ...
+}
+
+fn is_probably_turkish(text: &str) -> bool {
+    ...
+}
+
+fn estimate_tokens_with_tokenizer(text: &str) -> Option<usize> {
+    ...
+}
+── rust | full 2500 tok → skeleton 239 tok (10.46x reduction)

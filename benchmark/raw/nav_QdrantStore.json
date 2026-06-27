@@ -1,0 +1,11 @@
+[
+  {
+    "called_by": [],
+    "calls": [],
+    "end_line": 238,
+    "kind": "impl",
+    "path": "src/store/qdrant.rs",
+    "start_line": 69,
+    "symbol": "QdrantStore"
+  }
+]
