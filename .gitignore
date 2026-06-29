@@ -14,3 +14,15 @@
 # Python bytecode (bench scripts)
 __pycache__/
 *.pyc
+
+# Funding / application working docs (kept out of the repo intentionally)
+APPLICATION.md
+budget/
+
+# Local tooling configs and assets (not part of the published project)
+.codex/
+.mcp.json
+CLAUDE.md
+logo-1.png
+ragpilot.desktop
+ChatGPT Image*.png
