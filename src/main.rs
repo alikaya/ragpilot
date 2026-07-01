@@ -206,23 +206,23 @@ async fn cmd_doctor() -> anyhow::Result<()> {
 
             println!("\n{}", "─── Resource Warnings ───────────────────────────".bold());
             if cfg.indexing.include_dirs.is_empty() {
-                println!("  ! Tüm proje indexlenecek, büyük projelerde kaynak tüketimi artabilir.");
+                println!("  ! The whole project will be indexed; resource usage may grow on large projects.");
             }
             if cfg.indexing.include_extensions.len() > 8 {
-                println!("  ! Çok fazla dosya tipi indexleniyor.");
+                println!("  ! Indexing a large number of file types.");
             }
             if cfg.indexing.max_file_size_kb > 500 {
-                println!("  ! Büyük dosyalar RAM/CPU tüketimini artırabilir.");
+                println!("  ! Large files may increase RAM/CPU usage.");
             }
             if cfg.mcp.context_chunks > 6 {
-                println!("  ! MCP context sonuçları gereğinden büyük olabilir.");
+                println!("  ! MCP context results may be larger than necessary.");
             }
             if cfg.watcher.enabled {
-                println!("  ! Watcher büyük projelerde sürekli re-index tetikleyebilir.");
+                println!("  ! The watcher may trigger continuous re-indexing on large projects.");
             }
             for required in ["target", "node_modules", "vendor", "dist", "build", ".next", ".nuxt"] {
                 if !cfg.indexing.exclude_dirs.iter().any(|d| d == required) {
-                    println!("  ! '{}' exclude edilmemiş.", required);
+                    println!("  ! '{}' is not excluded.", required);
                 }
             }
         }
@@ -322,13 +322,13 @@ async fn cmd_setup(args: &[String]) -> anyhow::Result<()> {
             config::Config::template_with(&project_name, &choices.extensions, &choices.include_dirs),
         )?;
         println!("{} .rag/config.toml", "✓".green());
-        println!("    {} {}", "uzantılar:".dimmed(), choices.extensions.join(", "));
+        println!("    {} {}", "extensions:".dimmed(), choices.extensions.join(", "));
         let dirs = if choices.include_dirs.is_empty() {
-            "(tüm proje kökü)".to_string()
+            "(entire project root)".to_string()
         } else {
             choices.include_dirs.join(", ")
         };
-        println!("    {} {}", "dizinler:".dimmed(), dirs);
+        println!("    {} {}", "directories:".dimmed(), dirs);
     } else {
         println!("{} .rag/config.toml (already exists)", "i".blue());
     }
@@ -362,92 +362,91 @@ async fn cmd_setup(args: &[String]) -> anyhow::Result<()> {
 
 const AGENTS_MD: &str = r#"# AGENT EXECUTION POLICY — RAG-FIRST
 
-Bu projede dosya tarama ve geniş bağlam yükleme YASAKTIR.
-Tüm keşif ve analiz işlemleri MCP üzerinden yapılmalıdır.
+Broad file scanning and large-context loading are forbidden in this project.
+All discovery and analysis must go through the MCP server.
 
 ────────────────────────────────────────────────────
 
 ## 1. INDEX GUARANTEE
 
-Her görev başlangıcında:
+At the start of every task:
 
-1. `rag_index_status` çağır.
-2. Eğer `Dirty files > 0` ise:
-   → `rag_ensure_index` çağır.
-3. Index güncel olmadan analiz yapma.
+1. Call `rag_index_status`.
+2. If `Dirty files > 0`:
+   → Call `rag_ensure_index`.
+3. Do not analyze until the index is up to date.
 
 ────────────────────────────────────────────────────
 
 ## 2. CONTEXT ACQUISITION RULE
 
-Görev başında:
+At the start of a task:
 
-→ `context_bundle(task, budget_tokens)` çağır.
+→ Call `context_bundle(task, budget_tokens)`.
 
-Dosyaları manuel açma.
-`rag_search` tek başına yeterli değilse `context_bundle` tercih edilir.
+Do not open files manually.
+If `rag_search` alone is not enough, prefer `context_bundle`.
 
-Dosya tamamını okumak YASAKTIR.
-Gerekirse sadece:
+Reading an entire file is forbidden.
+If needed, use only:
 → `rag_get_file_ranges`
-veya
+or
 → `rag_get_chunks`
-kullanılabilir.
 
 ────────────────────────────────────────────────────
 
 ## 3. SYMBOL NAVIGATION RULE
 
-Bir fonksiyon/class hakkında bilgi gerekiyorsa:
+When you need information about a function/class:
 
 1. `nav_symbol_resolve`
 2. `nav_call_graph`
 
-Çağrı grafiği çıkarılmadan refactor planı yapılmaz.
+Do not make a refactor plan without producing the call graph.
 
 ────────────────────────────────────────────────────
 
 ## 4. REFACTOR SAFETY RULE
 
-Refactor yapılacaksa:
+Before refactoring:
 
 1. `impact_analyze`
-2. Breaking signals kontrol edilir.
-3. Etkilenen dosyalar listelenir.
-4. Ardından değişiklik yapılır.
+2. Check breaking signals.
+3. List the affected files.
+4. Then make the change.
 
-Impact analizi olmadan refactor YASAKTIR.
+Refactoring without impact analysis is forbidden.
 
 ────────────────────────────────────────────────────
 
 ## 5. NO BROAD FILE READS
 
-Aşağıdakiler yasaktır:
+The following are forbidden:
 
-✗ Tüm repo tarama
-✗ Büyük dosyayı komple okuma
-✗ Tahmini dependency çıkarma
+✗ Scanning the whole repo
+✗ Reading a large file in full
+✗ Guessing dependencies
 
-Her zaman MCP araçları kullanılmalıdır.
+Always use the MCP tools.
 
 ────────────────────────────────────────────────────
 
 ## 6. TOKEN OPTIMIZATION PRIORITY
 
-Bağlam toplarken:
+When gathering context:
 
-- Maksimum 6000 token (context_bundle default)
-- Gereksiz tekrar yok
-- Aynı sorgu tekrar edilmez
+- Maximum 6000 tokens (context_bundle default)
+- No unnecessary repetition
+- Do not repeat the same query
 
 ────────────────────────────────────────────────────
 
 ## 7. FALLBACK RULE
 
-MCP sunucusu erişilemezse:
+If the MCP server is unreachable:
 
-- Kullanıcıya bildir
-- Manuel dosya analizi yapmadan önce onay iste
+- Notify the user
+- Ask for approval before doing any manual file analysis
 
 ────────────────────────────────────────────────────
 "#;
@@ -455,111 +454,110 @@ MCP sunucusu erişilemezse:
 
 const CLAUDE_MD: &str = r#"# AGENT EXECUTION POLICY — RAG-FIRST
 
-Bu projede dosya tarama ve geniş bağlam yükleme YASAKTIR.
-Tüm keşif ve analiz işlemleri `rag` MCP sunucusu üzerinden yapılmalıdır.
+Broad file scanning and large-context loading are forbidden in this project.
+All discovery and analysis must go through the `rag` MCP server.
 
-## MCP Sunucusu
+## MCP Server
 
-`rag` MCP sunucusu bu projede otomatik olarak aktiftir.
-`.claude/settings.json` içinde kayıtlıdır.
+The `rag` MCP server is automatically active in this project.
+It is registered in `.claude/settings.json`.
 
-Mevcut araçlar:
+Available tools:
 
-| Araç | Amaç |
-|------|------|
-| `rag_index_status` | Index durumu ve dirty dosya sayısı |
-| `rag_ensure_index` | Değişen dosyaları yeniden indexle |
-| `rag_search` | Semantik kod arama |
-| `rag_get_chunks` | Chunk ID ile tam içerik getir |
-| `rag_get_file_ranges` | Belirli satır aralıkları veya sembol tanımları |
-| `nav_symbol_resolve` | Sembol tanımı + çağrı grafı |
-| `nav_call_graph` | BFS çağrı ağacı (gelen + giden) |
-| `impact_analyze` | Refactor öncesi etki analizi |
-| `context_bundle` | Token bütçeli eksiksiz bağlam paketi |
+| Tool | Purpose |
+|------|---------|
+| `rag_index_status` | Index status and dirty file count |
+| `rag_ensure_index` | Re-index changed files |
+| `rag_search` | Semantic code search |
+| `rag_get_chunks` | Fetch full content by chunk ID |
+| `rag_get_file_ranges` | Specific line ranges or symbol definitions |
+| `nav_symbol_resolve` | Symbol definition + call graph |
+| `nav_call_graph` | BFS call tree (incoming + outgoing) |
+| `impact_analyze` | Pre-refactor impact analysis |
+| `context_bundle` | Token-budgeted complete context bundle |
 
 ────────────────────────────────────────────────────
 
 ## 1. INDEX GUARANTEE
 
-Her görev başlangıcında:
+At the start of every task:
 
-1. `rag_index_status` çağır.
-2. Eğer `Dirty files > 0` ise:
-   → `rag_ensure_index` çağır.
-3. Index güncel olmadan analiz yapma.
+1. Call `rag_index_status`.
+2. If `Dirty files > 0`:
+   → Call `rag_ensure_index`.
+3. Do not analyze until the index is up to date.
 
 ────────────────────────────────────────────────────
 
 ## 2. CONTEXT ACQUISITION RULE
 
-Görev başında:
+At the start of a task:
 
-→ `context_bundle(task, budget_tokens)` çağır.
+→ Call `context_bundle(task, budget_tokens)`.
 
-Dosyaları manuel açma.
-`rag_search` tek başına yeterli değilse `context_bundle` tercih edilir.
+Do not open files manually.
+If `rag_search` alone is not enough, prefer `context_bundle`.
 
-Dosya tamamını okumak YASAKTIR.
-Gerekirse sadece:
+Reading an entire file is forbidden.
+If needed, use only:
 → `rag_get_file_ranges`
-veya
+or
 → `rag_get_chunks`
-kullanılabilir.
 
 ────────────────────────────────────────────────────
 
 ## 3. SYMBOL NAVIGATION RULE
 
-Bir fonksiyon/class hakkında bilgi gerekiyorsa:
+When you need information about a function/class:
 
 1. `nav_symbol_resolve`
 2. `nav_call_graph`
 
-Çağrı grafiği çıkarılmadan refactor planı yapılmaz.
+Do not make a refactor plan without producing the call graph.
 
 ────────────────────────────────────────────────────
 
 ## 4. REFACTOR SAFETY RULE
 
-Refactor yapılacaksa:
+Before refactoring:
 
 1. `impact_analyze`
-2. Breaking signals kontrol edilir.
-3. Etkilenen dosyalar listelenir.
-4. Ardından değişiklik yapılır.
+2. Check breaking signals.
+3. List the affected files.
+4. Then make the change.
 
-Impact analizi olmadan refactor YASAKTIR.
+Refactoring without impact analysis is forbidden.
 
 ────────────────────────────────────────────────────
 
 ## 5. NO BROAD FILE READS
 
-Aşağıdakiler yasaktır:
+The following are forbidden:
 
-✗ Tüm repo tarama
-✗ Büyük dosyayı komple okuma
-✗ Tahmini dependency çıkarma
+✗ Scanning the whole repo
+✗ Reading a large file in full
+✗ Guessing dependencies
 
-Her zaman MCP araçları kullanılmalıdır.
+Always use the MCP tools.
 
 ────────────────────────────────────────────────────
 
 ## 6. TOKEN OPTIMIZATION PRIORITY
 
-Bağlam toplarken:
+When gathering context:
 
-- Maksimum 6000 token (context_bundle default)
-- Gereksiz tekrar yok
-- Aynı sorgu tekrar edilmez
+- Maximum 6000 tokens (context_bundle default)
+- No unnecessary repetition
+- Do not repeat the same query
 
 ────────────────────────────────────────────────────
 
 ## 7. FALLBACK RULE
 
-MCP sunucusu erişilemezse:
+If the MCP server is unreachable:
 
-- Kullanıcıya bildir
-- Manuel dosya analizi yapmadan önce onay iste
+- Notify the user
+- Ask for approval before doing any manual file analysis
 
 ────────────────────────────────────────────────────
 "#;

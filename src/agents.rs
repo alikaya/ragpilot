@@ -34,7 +34,7 @@ pub fn configure(agent: &str, root: &Path) -> Result<()> {
         // CLI (binary `agy`). Redirect with a clear notice.
         "gemini" | "gemini-cli" => {
             println!(
-                "{} Gemini CLI 2026-06-18'de kullanımdan kaldırıldı → Antigravity CLI'ye yönlendiriliyor.",
+                "{} Gemini CLI was deprecated on 2026-06-18 → redirecting to the Antigravity CLI.",
                 "⚠".yellow()
             );
             antigravity(root)
@@ -98,7 +98,7 @@ fn antigravity(root: &Path) -> Result<()> {
         "~/.gemini/config/mcp_config.json",
         "mcpServers",
         false,
-        Some("CLI (agy) + IDE 2.0 ortak config. CLI'ye özel: ~/.gemini/antigravity-cli/mcp_config.json"),
+        Some("CLI (agy) + IDE 2.0 share this config. CLI-only path: ~/.gemini/antigravity-cli/mcp_config.json"),
     );
     write_doc(&root.join("AGENTS.md"), crate::AGENTS_MD, "AGENTS.md")
 }
@@ -150,7 +150,7 @@ fn codex(root: &Path) -> Result<()> {
         let content = format!(
             "[projects.\"{}\"]\ntrust_level = \"trusted\"\n\n\
              [mcp_servers.ragpilot]\ncommand = \"ragpilot\"\nargs    = [\"--mcp-server\"]\n\n\
-             # Güvenlik için sadece bu projede aktif\ntrusted = true\n",
+             # For safety, enabled only in this project\ntrusted = true\n",
             root_str
         );
         std::fs::write(&codex_config, content)?;
@@ -255,11 +255,11 @@ fn global_snippet(name: &str, path: &str, root_key: &str, include_type: bool, hi
     let snippet = serde_json::to_string_pretty(&Value::Object(obj)).unwrap_or_default();
 
     println!(
-        "\n{} {} yalnızca GLOBAL config destekler (proje içi config yok).",
+        "\n{} {} only supports a GLOBAL config (no per-project config).",
         "ℹ".blue(),
         name.bold()
     );
-    println!("  Şu dosyaya ekle: {}", path.bold());
+    println!("  Add to this file: {}", path.bold());
     if let Some(h) = hint {
         println!("  {}", h.dimmed());
     }
