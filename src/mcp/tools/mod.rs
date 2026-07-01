@@ -31,11 +31,27 @@ pub struct McpContext {
 
 // ─── Dispatch ─────────────────────────────────────────────────────────────────
 
-pub async fn handle_request(req: &McpRequest, ctx: &Arc<McpContext>) -> McpResponse {
+/// Guidance returned when a tool is called before any project is loaded — e.g.
+/// a global (folder-independent) client that launched the server without a
+/// project directory. `initialize` and `tools/list` still succeed so the
+/// handshake never fails; only tool calls need a loaded project.
+const NO_PROJECT_MSG: &str = "ragpilot: no project is loaded. Launch the server with \
+`--root <path>`, set the RAGPILOT_ROOT environment variable, or open a folder that \
+contains a .rag/config.toml (run `ragpilot init` there first).";
+
+const DEFAULT_SEARCH_DESC: &str = "Searches the local project codebase and documentation \
+using semantic similarity. Returns relevant code snippets and docs with file paths.";
+
+pub async fn handle_request(req: &McpRequest, ctx: Option<&Arc<McpContext>>) -> McpResponse {
     match req.method.as_str() {
+        // Handshake methods never depend on a loaded project, so they always
+        // answer cleanly — this is what prevents the client-visible "EOF".
         "initialize"  => handle_initialize(req),
-        "tools/list"  => handle_tools_list(req, ctx),
-        "tools/call"  => handle_tools_call(req, ctx).await,
+        "tools/list"  => handle_tools_list(req, ctx.map(|c| &**c)),
+        "tools/call"  => match ctx {
+            Some(c) => handle_tools_call(req, c).await,
+            None    => McpResponse::tool_error(req.id.clone(), NO_PROJECT_MSG.to_string()),
+        },
         other => McpResponse::error(-32601, &format!("Method not found: {other}"), req.id.clone()),
     }
 }
@@ -59,9 +75,12 @@ fn handle_initialize(req: &McpRequest) -> McpResponse {
     }))
 }
 
-fn handle_tools_list(req: &McpRequest, ctx: &McpContext) -> McpResponse {
+fn handle_tools_list(req: &McpRequest, ctx: Option<&McpContext>) -> McpResponse {
+    let search_desc = ctx
+        .map(|c| c.config.mcp.search_tool_description.as_str())
+        .unwrap_or(DEFAULT_SEARCH_DESC);
     let mut tools = Vec::new();
-    tools.extend(rag::tool_definitions(ctx));
+    tools.extend(rag::tool_definitions(search_desc));
     tools.extend(nav::tool_definitions());
     tools.extend(impact::tool_definitions());
     tools.extend(context::tool_definitions());

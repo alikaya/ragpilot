@@ -48,6 +48,7 @@ pub fn configure(agent: &str, root: &Path) -> Result<()> {
                 "mcpServers",
                 false,
                 None,
+                root,
             );
             Ok(())
         }
@@ -99,6 +100,7 @@ fn antigravity(root: &Path) -> Result<()> {
         "mcpServers",
         false,
         Some("CLI (agy) + IDE 2.0 share this config. CLI-only path: ~/.gemini/antigravity-cli/mcp_config.json"),
+        root,
     );
     write_doc(&root.join("AGENTS.md"), crate::AGENTS_MD, "AGENTS.md")
 }
@@ -164,10 +166,23 @@ fn codex(root: &Path) -> Result<()> {
 
 /// The canonical stdio server entry. `include_type` adds `"type": "stdio"`.
 fn server_entry(include_type: bool) -> Value {
+    server_entry_with_root(include_type, None)
+}
+
+/// Like `server_entry`, but when `root` is given the server is pinned to that
+/// project via `--root <abs path>`. Used for global ($HOME) clients that launch
+/// the server folder-independently and therefore cannot rely on the cwd.
+fn server_entry_with_root(include_type: bool, root: Option<&Path>) -> Value {
+    let mut args = vec![json!("--mcp-server")];
+    if let Some(r) = root {
+        let abs = r.canonicalize().unwrap_or_else(|_| r.to_path_buf());
+        args.push(json!("--root"));
+        args.push(json!(abs.to_string_lossy()));
+    }
     if include_type {
-        json!({ "type": "stdio", "command": "ragpilot", "args": ["--mcp-server"] })
+        json!({ "type": "stdio", "command": "ragpilot", "args": args })
     } else {
-        json!({ "command": "ragpilot", "args": ["--mcp-server"] })
+        json!({ "command": "ragpilot", "args": args })
     }
 }
 
@@ -246,10 +261,12 @@ fn write_doc(path: &Path, content: &str, display: &str) -> Result<()> {
 // ─── Global-only clients ───────────────────────────────────────────────────────
 
 /// Print a paste-in snippet for clients that only support a global ($HOME)
-/// config — we never write outside the repo during `init`.
-fn global_snippet(name: &str, path: &str, root_key: &str, include_type: bool, hint: Option<&str>) {
+/// config — we never write outside the repo during `init`. The snippet pins the
+/// server to `root` via `--root`, since a global client launches it folder-
+/// independently and cannot rely on the working directory.
+fn global_snippet(name: &str, path: &str, root_key: &str, include_type: bool, hint: Option<&str>, root: &Path) {
     let mut servers = Map::new();
-    servers.insert("ragpilot".into(), server_entry(include_type));
+    servers.insert("ragpilot".into(), server_entry_with_root(include_type, Some(root)));
     let mut obj = Map::new();
     obj.insert(root_key.into(), Value::Object(servers));
     let snippet = serde_json::to_string_pretty(&Value::Object(obj)).unwrap_or_default();
@@ -260,6 +277,7 @@ fn global_snippet(name: &str, path: &str, root_key: &str, include_type: bool, hi
         name.bold()
     );
     println!("  Add to this file: {}", path.bold());
+    println!("  Pinned to this project via --root {}", root.display().to_string().dimmed());
     if let Some(h) = hint {
         println!("  {}", h.dimmed());
     }

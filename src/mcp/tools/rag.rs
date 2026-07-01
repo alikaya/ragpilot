@@ -8,11 +8,11 @@ use crate::mcp::protocol::{McpRequest, McpResponse};
 
 // ─── Tool definitions ─────────────────────────────────────────────────────────
 
-pub fn tool_definitions(ctx: &McpContext) -> Vec<serde_json::Value> {
+pub fn tool_definitions(search_desc: &str) -> Vec<serde_json::Value> {
     vec![
         json!({
             "name": "rag_search",
-            "description": ctx.config.mcp.search_tool_description,
+            "description": search_desc,
             "inputSchema": {
                 "type": "object",
                 "properties": {

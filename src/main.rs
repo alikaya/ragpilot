@@ -20,8 +20,8 @@ async fn main() -> anyhow::Result<()> {
         Some("--mcp-server") => mcp::run_server().await,
 
         Some("init") => {
-            // "ragpilot init <folder> <agent>"  →  setup modu
-            // "ragpilot init [--force]"         →  sadece indexleme
+            // "ragpilot init <folder> <agent>"  →  setup mode
+            // "ragpilot init [--force]"         →  index only
             let has_folder = args.get(2).map(|a| !a.starts_with('-')).unwrap_or(false);
             let has_agent  = args.get(3).map(|a| !a.starts_with('-')).unwrap_or(false);
             if has_folder && has_agent {
@@ -54,6 +54,7 @@ async fn main() -> anyhow::Result<()> {
                  \n\
                  Usage:\n\
                    ragpilot --mcp-server              Start MCP server (stdio)\n\
+                   ragpilot --mcp-server --root <dir>  Start MCP server pinned to <dir> (for global clients)\n\
                    ragpilot init <folder> <agent>     Init project + agent config\n\
                                                      agents: claude codex cursor vscode opencode windsurf antigravity all\n\
                    ragpilot init [--force]            Index current project\n\
