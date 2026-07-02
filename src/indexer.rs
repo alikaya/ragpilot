@@ -338,6 +338,7 @@ pub fn file_language(extension: &str) -> &'static str {
         "rb" => "ruby",
         "php" => "php",
         "swift" => "swift",
+        "dart" => "dart",
         "kt" | "kts" => "kotlin",
         "scala" => "scala",
         "sh" | "bash" | "zsh" => "shell",
