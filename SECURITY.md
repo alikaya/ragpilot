@@ -36,5 +36,7 @@ RagPilot is a local-first tool. In its default configuration it:
 Relevant areas for security consideration include: handling of untrusted
 repository content during parsing/indexing, the MCP stdio interface, and the
 optional API embedding providers (which send chunk text to a third-party
-service when explicitly configured). A formal threat model is planned as part
-of the project roadmap.
+service when explicitly configured).
+
+A full data-flow diagram, trust-boundary analysis, threat table, and hardening
+checklist are in **[docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md)**.

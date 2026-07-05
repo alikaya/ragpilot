@@ -260,6 +260,9 @@ ragpilot doctor    # → "✓ Embedding model cached (…)"
 Everything else is local by design: Qdrant runs on your own host, the symbol
 graph is SQLite on disk, and `ragpilot` never calls a language-model API.
 
+For the full data-flow diagram, trust boundaries, threat model, and a
+hardening checklist, see [`docs/SECURITY_MODEL.md`](docs/SECURITY_MODEL.md).
+
 ---
 
 ## Project Structure

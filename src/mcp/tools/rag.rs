@@ -84,10 +84,10 @@ pub fn get_skeleton(req: &McpRequest, args: &serde_json::Value, ctx: &McpContext
         None    => return McpResponse::tool_error(req.id.clone(), "Missing 'path'".into()),
     };
 
-    let full_path = ctx.root.join(rel_path);
-    if !full_path.starts_with(&ctx.root) {
-        return McpResponse::tool_error(req.id.clone(), "Path outside project root".into());
-    }
+    let full_path = match super::resolve_in_root(&ctx.root, rel_path) {
+        Ok(p)  => p,
+        Err(e) => return McpResponse::tool_error(req.id.clone(), e),
+    };
 
     let content = match std::fs::read_to_string(&full_path) {
         Ok(c)  => c,
@@ -233,10 +233,10 @@ pub async fn get_file_ranges(req: &McpRequest, args: &serde_json::Value, ctx: &M
         None    => return McpResponse::tool_error(req.id.clone(), "Missing 'ranges'".into()),
     };
 
-    let full_path = ctx.root.join(rel_path);
-    if !full_path.starts_with(&ctx.root) {
-        return McpResponse::tool_error(req.id.clone(), "Path outside project root".into());
-    }
+    let full_path = match super::resolve_in_root(&ctx.root, rel_path) {
+        Ok(p)  => p,
+        Err(e) => return McpResponse::tool_error(req.id.clone(), e),
+    };
 
     let content = match std::fs::read_to_string(&full_path) {
         Ok(c)  => c,

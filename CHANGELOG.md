@@ -4,6 +4,30 @@ All notable changes to **ragpilot** are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/) and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Security
+- **Fixed a path-traversal vulnerability** in the file-serving MCP tools
+  (`rag_get_file_ranges`, `rag_get_skeleton`). The previous `starts_with`
+  containment check was lexical, so `../../../../etc/passwd` resolved and read
+  files outside the project root. Paths now go through `resolve_in_root`, which
+  rejects `..` and absolute paths and enforces canonical containment (defeating
+  symlink escapes); covered by tests and live exploit re-tests.
+- Added **[docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md)** — data-flow
+  diagram, trust boundaries, threat table, and a hardening checklist, each
+  grounded in the code.
+
+### Added
+- **Offline / air-gapped operation** is now first-class: deterministic model
+  cache resolution (config `cache_dir` → project `.fastembed_cache` → shared
+  `~/.cache/ragpilot/models`), an actionable error when the model is missing,
+  a `ragpilot doctor` offline-readiness check, and a README section (verified
+  with all network access blocked).
+
+### Fixed
+- Config parse errors are surfaced instead of being masked as
+  "No .rag/config.toml found".
+
 ## [0.5.0] - 2026-07-05
 
 ### Added
