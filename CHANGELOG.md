@@ -4,7 +4,7 @@ All notable changes to **ragpilot** are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/) and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.5.1] - 2026-07-05
 
 ### Security
 - **Fixed a path-traversal vulnerability** in the file-serving MCP tools
