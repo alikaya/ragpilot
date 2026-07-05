@@ -17,6 +17,11 @@ async fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().collect();
 
     match args.get(1).map(String::as_str) {
+        Some("--version") | Some("-V") => {
+            println!("ragpilot {}", env!("CARGO_PKG_VERSION"));
+            Ok(())
+        }
+
         Some("--mcp-server") => mcp::run_server().await,
 
         Some("init") => {
@@ -69,6 +74,7 @@ async fn main() -> anyhow::Result<()> {
                    ragpilot clean [--yes]          Delete Qdrant collection\n\
                    ragpilot hooks                  Install git post-commit/post-merge hooks\n\
                    ragpilot doctor                 Check installation and configuration\n\
+                   ragpilot --version              Print version\n\
                  \n\
                  Examples:\n\
                    ragpilot init /path/to/myapp codex\n\

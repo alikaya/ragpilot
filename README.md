@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo.png" alt="ragpilot logo" width="200">
+  <img src="https://raw.githubusercontent.com/alikaya/ragpilot/main/logo.png" alt="ragpilot logo" width="200">
 </p>
 
 <h1 align="center">ragpilot</h1>
@@ -57,11 +57,18 @@ docker run -d -p 6334:6334 qdrant/qdrant
 
 ## Installation
 
+### From crates.io
+
+```bash
+cargo install ragpilot
+```
+
+### From source
+
 ```bash
 git clone https://github.com/alikaya/ragpilot
 cd ragpilot
-cargo build --release
-sudo cp target/release/ragpilot /usr/local/bin/ragpilot
+cargo install --path .
 ```
 
 ---

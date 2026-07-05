@@ -4,6 +4,58 @@ All notable changes to **ragpilot** are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/) and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] - 2026-07-05
+
+### Added
+- **`--version` / `-V` flag** and first **crates.io release**
+  (`cargo install ragpilot`).
+- **Project-root resolution for folder-independent MCP clients** — the server
+  now resolves its project in priority order: an explicit `--root <path>` /
+  `RAGPILOT_ROOT` env var, the workspace root the client announces during
+  `initialize` (`rootUri` / `workspaceFolders` / `rootPath`), then the working
+  directory. Global clients (Antigravity, Windsurf) get `--root`-pinned config
+  snippets from `init`.
+- **Dart/Flutter** in the `init` language selection; `.dart` files are labeled
+  `dart` in search results and language filters.
+
+### Changed
+- **Impact analysis is now call-graph-driven.** `impact_analyze` walks
+  incoming call edges transitively (BFS with hop distance and `via` chain),
+  derives affected files from real callers, matches the import graph with
+  language-aware module patterns (Rust `crate::`/`super::`, Python dotted
+  modules, JS/TS relative + index imports), skips ambiguous names (multiple
+  project-wide definitions) with an explicit signal instead of flooding
+  results, and reports real direct-caller counts in `breaking_signals`.
+- **`rag_get_file_ranges` resolves symbols through the symbol graph** — exact
+  start/end lines for any indexed kind (`const`, `struct`, `pub async fn`, …),
+  with a broader qualifier-stripping text fallback.
+- **All output is English-only** — generated `AGENTS.md`/`CLAUDE.md` policy
+  docs, `doctor` warnings, `init`/`setup` labels, and agent registration
+  notices.
+
+### Fixed
+- `impact_analyze` returned empty results structurally: imports are stored as
+  module paths but were queried with file paths, and the call graph was never
+  consulted.
+- MCP server startup no longer `exit(1)`s before answering `initialize` when
+  no config is found (clients saw `calling "initialize": EOF`); it now answers
+  the handshake and reports a clear error on tool calls instead.
+- Deleted files no longer leave stale rows in the import-dependency index
+  (cleanup on delete + orphan pruning on reindex).
+
+## [0.4.0] - 2026-06-29
+
+### Added
+- **MIT `LICENSE` file** and complete Cargo metadata (description, license,
+  repository, keywords, categories) — the README already declared MIT, but the
+  license file itself was missing.
+- **Governance docs**: `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`,
+  `ROADMAP.md`.
+- **Reproducible benchmark harness** under `benchmark/` (replacing the ad-hoc
+  `bench/` scripts): ten scenarios, three runs each, writes `results.json` +
+  `report.md` + raw outputs.
+- Project logo.
+
 ## [0.3.0] - 2026-06-20
 
 ### Added
