@@ -6,6 +6,12 @@
 
 <p align="center">RAG (Retrieval-Augmented Generation) MCP server for local codebases.</p>
 
+<p align="center">
+  <a href="https://crates.io/crates/ragpilot"><img src="https://img.shields.io/crates/v/ragpilot.svg" alt="crates.io"></a>
+  <a href="https://crates.io/crates/ragpilot"><img src="https://img.shields.io/crates/d/ragpilot.svg" alt="downloads"></a>
+  <a href="https://github.com/alikaya/ragpilot/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license"></a>
+</p>
+
 Provides tools to AI agents — Claude Code, Codex, Cursor, VS Code, opencode, Antigravity, and Windsurf — that help them understand your project: semantic search, symbol navigation, impact analysis, and context bundling.
 
 ---
