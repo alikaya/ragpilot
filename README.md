@@ -231,6 +231,35 @@ max_depth = 3         # impact_analyze BFS depth
 | `BAAI/bge-large-en-v1.5` | 1024 | 1.2 GB |
 | `nomic-ai/nomic-embed-text-v1.5` | 768 | — |
 
+### Offline / Air-Gapped Operation
+
+With the local provider, only the **first** run needs internet — it downloads
+the embedding model from huggingface.co into a cache. After that, indexing and
+search run fully offline (verified with all network access blocked).
+
+The cache location is resolved in this order:
+
+1. `embedding.local.cache_dir` in `.rag/config.toml` (if set)
+2. `<project>/.fastembed_cache/` (if it already exists)
+3. `~/.cache/ragpilot/models/` — shared user-level default, so the model is
+   downloaded once per machine, not once per project
+
+For a machine with no internet access:
+
+```bash
+# On a networked machine (same OS/arch), populate the cache once:
+cargo install ragpilot && cd /any/project && ragpilot init
+
+# Copy the cache to the air-gapped machine:
+cp -r ~/.cache/ragpilot/models  <air-gapped>:~/.cache/ragpilot/models
+
+# Verify offline readiness on the target machine:
+ragpilot doctor    # → "✓ Embedding model cached (…)"
+```
+
+Everything else is local by design: Qdrant runs on your own host, the symbol
+graph is SQLite on disk, and `ragpilot` never calls a language-model API.
+
 ---
 
 ## Project Structure

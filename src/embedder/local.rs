@@ -40,6 +40,39 @@ fn expand_tilde(path: &str) -> std::path::PathBuf {
     std::path::PathBuf::from(path)
 }
 
+/// Resolve the model cache directory deterministically — never relative to the
+/// process working directory (a server launched with `--root` from $HOME must
+/// find the same cache as one launched inside the project):
+/// 1. `embedding.local.cache_dir` from config (tilde-expanded),
+/// 2. `<project root>/.fastembed_cache` when it already exists (projects that
+///    downloaded there before keep working offline),
+/// 3. a user-level shared cache (`~/.cache/ragpilot/models`), so the ~130MB
+///    model is downloaded once per machine instead of once per directory.
+pub fn resolve_cache_dir(config: &LocalEmbeddingConfig, root: &std::path::Path) -> std::path::PathBuf {
+    if let Some(ref cache_dir) = config.cache_dir {
+        return expand_tilde(cache_dir);
+    }
+    let project_cache = root.join(".fastembed_cache");
+    if project_cache.is_dir() {
+        return project_cache;
+    }
+    dirs::cache_dir()
+        .map(|d| d.join("ragpilot").join("models"))
+        .unwrap_or(project_cache)
+}
+
+/// Whether `cache_dir` holds at least one downloaded model snapshot.
+pub fn cache_has_model(cache_dir: &std::path::Path) -> bool {
+    std::fs::read_dir(cache_dir)
+        .map(|entries| {
+            entries.flatten().any(|e| {
+                e.file_name().to_string_lossy().starts_with("models--")
+                    && e.path().is_dir()
+            })
+        })
+        .unwrap_or(false)
+}
+
 pub struct LocalEmbedder {
     inner: Arc<TextEmbedding>,
     dimension: usize,
@@ -48,19 +81,30 @@ pub struct LocalEmbedder {
 }
 
 impl LocalEmbedder {
-    pub fn new(config: &LocalEmbeddingConfig) -> Result<Self> {
+    pub fn new(config: &LocalEmbeddingConfig, root: &std::path::Path) -> Result<Self> {
         let info = resolve_model(&config.model)?;
+        let cache_dir = resolve_cache_dir(config, root);
 
-        let mut opts = InitOptions::new(info.model).with_show_download_progress(true);
+        let opts = InitOptions::new(info.model)
+            .with_show_download_progress(true)
+            .with_cache_dir(cache_dir.clone());
 
-        if let Some(ref cache_dir) = config.cache_dir {
-            let path = expand_tilde(cache_dir);
-            opts = opts.with_cache_dir(path);
-        }
-
-        tracing::info!("Loading local embedding model: {}", config.model);
-        let te = TextEmbedding::try_new(opts)
-            .map_err(|e| anyhow!("Failed to initialize local embedder: {e}"))?;
+        tracing::info!(
+            "Loading local embedding model: {} (cache: {})",
+            config.model,
+            cache_dir.display()
+        );
+        let te = TextEmbedding::try_new(opts).map_err(|e| {
+            anyhow!(
+                "Failed to initialize local embedder: {e}\n\
+                 Model cache: {}\n\
+                 The first run downloads the model (~130MB) from huggingface.co.\n\
+                 On an offline/air-gapped machine, copy a populated cache from a\n\
+                 networked machine to that path (or point embedding.local.cache_dir\n\
+                 in .rag/config.toml at one), then retry.",
+                cache_dir.display()
+            )
+        })?;
 
         Ok(Self {
             inner: Arc::new(te),

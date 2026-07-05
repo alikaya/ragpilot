@@ -14,9 +14,11 @@ pub trait Embedder: Send + Sync {
     fn model_name(&self) -> &str;
 }
 
-pub fn create(config: &EmbeddingConfig) -> Result<Box<dyn Embedder>> {
+/// `root` is the project root — the local embedder anchors its model cache to
+/// it so cache resolution never depends on the process working directory.
+pub fn create(config: &EmbeddingConfig, root: &std::path::Path) -> Result<Box<dyn Embedder>> {
     match config.provider.as_str() {
-        "local" => Ok(Box::new(local::LocalEmbedder::new(&config.local)?)),
+        "local" => Ok(Box::new(local::LocalEmbedder::new(&config.local, root)?)),
         "api"   => Ok(Box::new(api::ApiEmbedder::new(&config.api)?)),
         other   => anyhow::bail!("Unknown embedding provider: '{}'. Use 'local' or 'api'.", other),
     }

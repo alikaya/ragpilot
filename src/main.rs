@@ -211,6 +211,23 @@ async fn cmd_doctor() -> anyhow::Result<()> {
             }).await.unwrap_or(false);
             check(&format!("Qdrant reachable ({})", cfg.qdrant.url), qdrant_ok);
 
+            // Offline readiness: with the local provider, the embedding model
+            // must already be in the cache for air-gapped operation.
+            if cfg.embedding.provider == "local" {
+                let cache = embedder::local::resolve_cache_dir(&cfg.embedding.local, &root);
+                let cached = embedder::local::cache_has_model(&cache);
+                check(
+                    &format!("Embedding model cached ({})", cache.display()),
+                    cached,
+                );
+                if !cached {
+                    println!(
+                        "     First run needs internet to download the model (~130MB).\n     \
+                         For offline/air-gapped machines, copy a populated cache to that path."
+                    );
+                }
+            }
+
             println!("\n{}", "─── Resource Warnings ───────────────────────────".bold());
             if cfg.indexing.include_dirs.is_empty() {
                 println!("  ! The whole project will be indexed; resource usage may grow on large projects.");

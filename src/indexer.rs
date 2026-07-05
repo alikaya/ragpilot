@@ -581,7 +581,7 @@ fn build_orchestrator(root: &PathBuf, config: &Config) -> Result<crate::orchestr
     let db_path = Config::stores_db(root);
     crate::store::sqlite::SqliteStore::new(db_path.clone())?;
 
-    let embedder: Arc<dyn crate::embedder::Embedder> = Arc::from(crate::embedder::create(&config.embedding)?);
+    let embedder: Arc<dyn crate::embedder::Embedder> = Arc::from(crate::embedder::create(&config.embedding, root)?);
     let vector_store: Arc<dyn crate::store::VectorStore> = Arc::new(resolve_store(config)?);
     let symbol_graph = Arc::new(crate::store::symbol_graph::SymbolGraphStore::new(db_path.clone()));
     let project_tree = Arc::new(crate::store::project_tree::ProjectTreeStore::new(db_path.clone()));
@@ -643,12 +643,22 @@ pub async fn cmd_init(force: bool) -> Result<()> {
     Ok(())
 }
 
+/// Load the project config, distinguishing "file missing" (run init) from
+/// "file present but invalid" (show the real parse/validation error).
+fn load_config_or_explain(root: &Path) -> Result<Config> {
+    let path = Config::config_path(root);
+    if !path.exists() {
+        anyhow::bail!("No .rag/config.toml found. Run 'ragpilot init' first.");
+    }
+    Config::load(&path)
+        .map_err(|e| anyhow::anyhow!("Invalid config at {}: {e}", path.display()))
+}
+
 pub async fn cmd_update() -> Result<()> {
     use colored::Colorize;
 
     let root = current_root()?;
-    let config =
-        Config::load(&Config::config_path(&root)).map_err(|_| anyhow::anyhow!("No .rag/config.toml found. Run 'ragpilot init' first."))?;
+    let config = load_config_or_explain(&root)?;
 
     let state = IndexState::load(&Config::state_path(&root))?;
     println!("{} Checking for changes ({} files in index)…", "→".cyan(), state.file_hashes.len());
@@ -671,8 +681,7 @@ pub async fn cmd_status() -> Result<()> {
     use colored::Colorize;
 
     let root = current_root()?;
-    let config =
-        Config::load(&Config::config_path(&root)).map_err(|_| anyhow::anyhow!("No .rag/config.toml found. Run 'ragpilot init' first."))?;
+    let config = load_config_or_explain(&root)?;
     let state = IndexState::load(&Config::state_path(&root))?;
 
     println!("{}", "─── Project ─────────────────────────────".bold());
@@ -833,7 +842,7 @@ pub async fn cmd_clean(yes: bool) -> Result<()> {
     use colored::Colorize;
 
     let root = current_root()?;
-    let config = Config::load(&Config::config_path(&root)).map_err(|_| anyhow::anyhow!("No .rag/config.toml found."))?;
+    let config = load_config_or_explain(&root)?;
     let coll = config.qdrant.collection_name(&config.project.name);
 
     if !yes {

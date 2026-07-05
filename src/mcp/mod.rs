@@ -117,7 +117,7 @@ async fn build_context(root: &std::path::Path) -> anyhow::Result<Arc<McpContext>
         _     => config.embedding.local.model.as_str(),
     };
     eprintln!("ragpilot: loading embedding model '{model_name}'…");
-    let embedder: Arc<dyn embedder::Embedder> = Arc::from(embedder::create(&config.embedding)?);
+    let embedder: Arc<dyn embedder::Embedder> = Arc::from(embedder::create(&config.embedding, root)?);
     eprintln!("ragpilot: model ready. MCP server running on stdio.");
 
     // Vector store
