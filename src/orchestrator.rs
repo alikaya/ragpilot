@@ -193,6 +193,7 @@ impl IndexOrchestrator {
         let _ = self.vector_store.delete_by_source(rel_str).await;
         let _ = self.project_tree.remove(rel_str).await;
         let _ = self.symbol_graph.remove(rel_str).await;
+        let _ = self.impact_index.remove(rel_str).await;
     }
 
     /// Scan all files, find dirty ones, reindex them (vector + symbol graph + tree).
@@ -254,9 +255,14 @@ impl IndexOrchestrator {
         // longer scanned (e.g. left behind after a delete diverged from state).
         if self.config.symbol_graph.enabled {
             let keep: Vec<String> = scanned.iter().cloned().collect();
-            if let Ok(n) = self.symbol_graph.prune_except(keep).await {
+            if let Ok(n) = self.symbol_graph.prune_except(keep.clone()).await {
                 if n > 0 {
                     tracing::debug!("Pruned {n} orphaned file(s) from symbol graph");
+                }
+            }
+            if let Ok(n) = self.impact_index.prune_except(keep).await {
+                if n > 0 {
+                    tracing::debug!("Pruned {n} orphaned file(s) from impact index");
                 }
             }
         }

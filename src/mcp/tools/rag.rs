@@ -223,7 +223,7 @@ pub async fn get_chunks(req: &McpRequest, args: &serde_json::Value, ctx: &McpCon
 
 // ─── rag_get_file_ranges ──────────────────────────────────────────────────────
 
-pub fn get_file_ranges(req: &McpRequest, args: &serde_json::Value, ctx: &McpContext) -> McpResponse {
+pub async fn get_file_ranges(req: &McpRequest, args: &serde_json::Value, ctx: &McpContext) -> McpResponse {
     let rel_path = match args.get("path").and_then(|v| v.as_str()) {
         Some(p) => p.trim_start_matches('/'),
         None    => return McpResponse::tool_error(req.id.clone(), "Missing 'path'".into()),
@@ -244,6 +244,16 @@ pub fn get_file_ranges(req: &McpRequest, args: &serde_json::Value, ctx: &McpCont
     };
     let lines: Vec<&str> = content.lines().collect();
 
+    // Symbol ranges resolve through the symbol graph first (exact start/end
+    // for any indexed kind — fn, const, struct, impl, …); the text heuristic
+    // below is only a fallback for files the graph has not indexed.
+    let needs_symbols = ranges.iter().any(|r| r.get("symbol").is_some());
+    let file_symbols = if needs_symbols {
+        ctx.symbol_graph.symbols_in_file(rel_path).await.unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+
     let mut parts: Vec<serde_json::Value> = Vec::new();
 
     for range in ranges {
@@ -258,14 +268,18 @@ pub fn get_file_ranges(req: &McpRequest, args: &serde_json::Value, ctx: &McpCont
                 "content": lines[s..e].join("\n"),
             }));
         } else if let Some(sym) = range.get("symbol").and_then(|v| v.as_str()) {
-            if let Some((s, e)) = find_symbol_range(&lines, sym) {
-                parts.push(json!({
+            let graph_hit = file_symbols
+                .iter()
+                .find(|s| s.name.eq_ignore_ascii_case(sym))
+                .map(|s| (s.start_line.saturating_sub(1), s.end_line.min(lines.len())));
+            let hit = graph_hit.or_else(|| find_symbol_range(&lines, sym));
+            match hit {
+                Some((s, e)) if s < e => parts.push(json!({
                     "path": rel_path, "symbol": sym,
                     "start_line": s + 1, "end_line": e,
                     "content": lines[s..e].join("\n"),
-                }));
-            } else {
-                parts.push(json!({ "path": rel_path, "symbol": sym, "error": "not found" }));
+                })),
+                _ => parts.push(json!({ "path": rel_path, "symbol": sym, "error": "not found" })),
             }
         }
     }
@@ -277,16 +291,20 @@ pub fn get_file_ranges(req: &McpRequest, args: &serde_json::Value, ctx: &McpCont
 }
 
 fn find_symbol_range(lines: &[&str], symbol: &str) -> Option<(usize, usize)> {
+    const DECL_PREFIXES: &[&str] = &[
+        "fn ", "async fn ", "def ", "async def ", "class ", "function ",
+        "func ", "struct ", "impl ", "trait ", "enum ", "export ",
+        "const ", "static ", "type ", "let ", "var ", "interface ",
+        "module ", "mod ",
+    ];
     let start = lines.iter().position(|line| {
-        let t = line.trim();
-        t.contains(symbol) && (
-            t.starts_with("fn ")     || t.starts_with("pub fn ")   ||
-            t.starts_with("async fn")|| t.starts_with("def ")      ||
-            t.starts_with("class ")  || t.starts_with("function ") ||
-            t.starts_with("func ")   || t.starts_with("struct ")   ||
-            t.starts_with("impl ")   || t.starts_with("trait ")    ||
-            t.starts_with("enum ")   || t.starts_with("export ")
-        )
+        // Strip visibility/qualifier keywords so `pub async fn`, `pub const`,
+        // `export default function` etc. all reduce to a known prefix.
+        let mut t = line.trim();
+        for qualifier in ["pub(crate) ", "pub ", "export default ", "default ", "unsafe "] {
+            t = t.strip_prefix(qualifier).unwrap_or(t);
+        }
+        t.contains(symbol) && DECL_PREFIXES.iter().any(|p| t.starts_with(p))
     })?;
     let end = (start + 60).min(lines.len());
     Some((start, end))

@@ -110,7 +110,7 @@ async fn handle_tools_call(req: &McpRequest, ctx: &Arc<McpContext>) -> McpRespon
         // RAG tools
         "rag_search"           => rag::search(req, args, ctx).await,
         "rag_get_chunks"       => rag::get_chunks(req, args, ctx).await,
-        "rag_get_file_ranges"  => rag::get_file_ranges(req, args, ctx),
+        "rag_get_file_ranges"  => rag::get_file_ranges(req, args, ctx).await,
         "rag_get_skeleton"     => rag::get_skeleton(req, args, ctx),
         // Navigation
         "nav_symbol_resolve"   => nav::symbol_resolve(req, args, ctx).await,
