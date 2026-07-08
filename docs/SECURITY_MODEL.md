@@ -81,6 +81,11 @@ Step by step:
    reverse-dependency index live in SQLite at `.rag/stores.db` on local disk.
 5. **Serving** — tools return results to the MCP client over stdio.
 
+The core makes **no outbound calls of its own** — no telemetry, no usage
+reporting, no phone-home. (`run_server_with` exposes a neutral observation seam
+for a *separate* build to attach behaviour, but the open-source binary ships no
+observer.)
+
 ---
 
 ## 3. Trust boundaries

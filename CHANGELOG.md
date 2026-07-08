@@ -4,7 +4,18 @@ All notable changes to **ragpilot** are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/) and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
-## [0.5.1] - 2026-07-05
+## [Unreleased]
+
+### Changed
+- **The crate is now a library as well as the `ragpilot` binary.** All CLI
+  logic moved into the library (`ragpilot::run`); `main.rs` is a thin entry
+  point. This lets a separate distribution reuse the exact same engine instead
+  of forking it.
+- **Generic observation seam** (`ToolObserver` / `ObserverContext` +
+  `run_server_with`). The MCP server can call an optional observer *after* each
+  exchange is answered — a neutral extension point with no behaviour of its own.
+  The open-source binary ships **no** observer and makes no network calls; a
+  separate build can attach one. (The core carries no usage/telemetry code.)
 
 ### Security
 - **Fixed a path-traversal vulnerability** in the file-serving MCP tools

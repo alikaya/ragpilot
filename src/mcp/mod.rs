@@ -15,7 +15,26 @@ use crate::watcher::FileWatcher;
 use protocol::{McpRequest, McpResponse};
 use tools::McpContext;
 
+/// Minimal context handed to an observer: which project and where it lives.
+/// Deliberately narrow — an observer sees identity, never the stores.
+pub struct ObserverContext<'a> {
+    pub project: &'a str,
+    pub root: &'a std::path::Path,
+}
+
+/// A generic seam invoked after each MCP exchange, once the response has
+/// already been sent to the client. The open-source core ships no observer; a
+/// separate build can supply one (e.g. usage/audit reporting). Implementations
+/// must be cheap and non-blocking — this runs on the request path.
+pub trait ToolObserver: Send + Sync {
+    fn observe(&self, ctx: &ObserverContext, request: &McpRequest, response: &McpResponse);
+}
+
 pub async fn run_server() -> anyhow::Result<()> {
+    run_server_with(None).await
+}
+
+pub async fn run_server_with(observer: Option<Arc<dyn ToolObserver>>) -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_writer(std::io::stderr)
         .with_env_filter(
@@ -99,6 +118,16 @@ pub async fn run_server() -> anyhow::Result<()> {
 
         let response = tools::handle_request(&request, ctx.as_ref()).await;
         write_response(&mut stdout, &response).await?;
+
+        // Generic observation seam, strictly after the response is sent so it
+        // can never slow or fail a tool call. No-op unless a build supplied one.
+        if let (Some(obs), Some(c)) = (observer.as_ref(), ctx.as_ref()) {
+            obs.observe(
+                &ObserverContext { project: &c.config.project.name, root: &c.root },
+                &request,
+                &response,
+            );
+        }
     }
 
     Ok(())
