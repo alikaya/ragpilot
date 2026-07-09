@@ -28,6 +28,15 @@ Provides tools to AI agents — Claude Code, Codex, Cursor, VS Code, opencode, A
 - **Multiple embeddings** — Local (fastembed) or API (OpenAI, Cohere, Jina)
 - **Multi-client setup** — One-command MCP registration for Claude Code, Codex, Cursor, VS Code, and opencode (plus paste-in snippets for the global-only Windsurf & Antigravity CLI) via `ragpilot init <dir> <agent>`
 
+> ### 💜 Support RagPilot
+>
+> RagPilot measures its own worth — run `ragpilot stats` to see the tokens it
+> saves you versus feeding whole files to your agent. If it earns its keep,
+> please **[become a sponsor](https://github.com/sponsors/alikaya)** and keep
+> the open-source core independent and free for everyone.
+>
+> [![Sponsor on GitHub](https://img.shields.io/badge/Sponsor-GitHub_Sponsors-ea4aaa?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/alikaya)
+
 ---
 
 ## 📊 Performance & Token Efficiency
@@ -343,15 +352,6 @@ RAG_LOG=debug ragpilot --mcp-server 2>debug.log
 ```
 
 ---
-
-## Support
-
-RagPilot is free and MIT-licensed — and it measures its own worth: run
-`ragpilot stats` (or read the token-saving footer of any `context_bundle`) to
-see how many tokens it has saved you versus feeding whole files to your agent.
-If it is earning its keep, please consider
-[**sponsoring its development**](https://github.com/sponsors/alikaya).
-Sponsorships keep the open-source core moving, independent, and free for everyone.
 
 ## License
 
