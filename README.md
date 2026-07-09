@@ -344,6 +344,15 @@ RAG_LOG=debug ragpilot --mcp-server 2>debug.log
 
 ---
 
+## Support
+
+RagPilot is free and MIT-licensed — and it measures its own worth: run
+`ragpilot stats` (or read the token-saving footer of any `context_bundle`) to
+see how many tokens it has saved you versus feeding whole files to your agent.
+If it is earning its keep, please consider
+[**sponsoring its development**](https://github.com/sponsors/alikaya).
+Sponsorships keep the open-source core moving, independent, and free for everyone.
+
 ## License
 
 MIT
