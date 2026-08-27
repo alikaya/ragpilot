@@ -271,6 +271,26 @@ single index for good.
 
 ---
 
+## Local dashboard
+
+```bash
+ragpilot dashboard --open
+```
+
+A window onto this machine: every registered project with its layout, index
+freshness and collection size, and the brain beside it — rules, open threads,
+compiled notes. Read a note in place, close a finished thread, start a compile.
+
+It binds to the loopback interface only and is gated by a token minted at
+startup (printed with the URL), because the page can act and a page in your
+browser must not be able to act just by knowing the port. There is no build
+step and no web framework: the page is embedded in the binary and served over
+about a hundred lines of HTTP.
+
+Nothing here talks to a server, and nothing here is reported to one.
+
+---
+
 ## Second brain
 
 RagPilot can also keep a **second brain**: a persistent memory that belongs to

@@ -7,6 +7,11 @@ All notable changes to **ragpilot** are documented here. The format is based on
 ## [Unreleased]
 
 ### Fixed
+- **A thread stamp fed back into itself.** `session-start` prints open threads
+  with their `(opened …)` stamp, that lands in the transcript, and `session-end`
+  summarised it straight back — so the same thread reappeared as a new one,
+  stamped twice. Stamps are now stripped from incoming items before they are
+  compared and before they are written.
 - **`flush.model_override` did nothing.** The setting shipped in the config
   template, was documented as "empty = use compiler.model", and had a test — but
   nothing read it, so session summaries always ran on `compiler.model`. Now
@@ -21,6 +26,12 @@ All notable changes to **ragpilot** are documented here. The format is based on
   is what that check is for.
 
 ### Added
+- **`ragpilot dashboard`** — a local window onto the project fleet and the
+  brain: every registered project with its layout, index freshness, chunk and
+  point counts, beside the brain's rules, open threads and compiled notes. Read
+  a note, close a thread, start a compile. Loopback only, gated by a token
+  minted at startup, no build step and no web framework — the page is embedded
+  and served over a small hand-written HTTP layer, so the crate stays lean.
 - **Rules that accumulate.** `brain_note` with `kind: "rule"` records a
   correction — and the reason for it — in `rules.md`, which loads at the start
   of every session ahead of anything situational. A correction now only has to

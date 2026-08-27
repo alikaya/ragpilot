@@ -10,6 +10,7 @@
 mod agents;
 mod brain;
 mod config;
+mod dashboard;
 mod embedder;
 mod indexer;
 mod migrate;
@@ -147,6 +148,12 @@ async fn dispatch(observer: Option<Arc<dyn ToolObserver>>) -> anyhow::Result<()>
 
         Some("paths") => cmd_paths(),
 
+        Some("dashboard") => {
+            let port = flag_value(&args, "--port").and_then(|p| p.parse().ok()).unwrap_or(7777);
+            let open = args.iter().any(|a| a == "--open");
+            dashboard::cmd_dashboard(port, open).await
+        }
+
         Some("hooks") => cmd_hooks().await,
         Some("doctor") => cmd_doctor().await,
 
@@ -177,6 +184,7 @@ async fn dispatch(observer: Option<Arc<dyn ToolObserver>>) -> anyhow::Result<()>
                    ragpilot update                 Re-index changed files\n\
                    ragpilot status                 Show index statistics\n\
                    ragpilot paths                  Print where this project's data lives\n\
+                   ragpilot dashboard [--open]     Local dashboard: projects + brain\n\
 \n\
                    ragpilot stats                  Show last context_bundle token savings\n\
                    ragpilot skeleton <file>        Print a token-efficient skeleton of a file\n\

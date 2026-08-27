@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RagPilot</title>
+<style>
+:root{--bg:#0e1116;--panel:#161b22;--line:#242c37;--fg:#e6edf3;--dim:#8b949e;--accent:#58a6ff;--ok:#3fb950;--warn:#d29922;--bad:#f85149}
+@media (prefers-color-scheme:light){:root{--bg:#fff;--panel:#f6f8fa;--line:#d8dee4;--fg:#1f2328;--dim:#636c76;--accent:#0969da}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{display:flex;align-items:baseline;gap:1rem;padding:1rem 1.25rem;border-bottom:1px solid var(--line);flex-wrap:wrap}
+h1{margin:0;font-size:1.05rem;letter-spacing:.2px}
+.dim{color:var(--dim)}
+main{padding:1.25rem;display:grid;gap:1.25rem;grid-template-columns:1fr;max-width:1400px}
+@media(min-width:1000px){main{grid-template-columns:1.6fr 1fr}}
+section{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.head{display:flex;align-items:center;gap:.6rem;padding:.65rem .9rem;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.head h2{margin:0;font-size:.82rem;text-transform:uppercase;letter-spacing:.08em;color:var(--dim)}
+.stats{display:flex;gap:1.25rem;padding:.75rem .9rem;flex-wrap:wrap;border-bottom:1px solid var(--line)}
+.stat b{display:block;font-size:1.3rem;font-variant-numeric:tabular-nums}
+.stat span{font-size:.72rem;color:var(--dim);text-transform:uppercase;letter-spacing:.06em}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th{text-align:left;font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);font-weight:600;padding:.45rem .9rem;position:sticky;top:0;background:var(--panel)}
+td{padding:.4rem .9rem;border-top:1px solid var(--line)}
+td.num{text-align:right}
+tbody tr:hover{background:rgba(127,127,127,.08)}
+.scroll{max-height:60vh;overflow:auto}
+.tag{font-size:.68rem;padding:.1rem .4rem;border-radius:4px;border:1px solid var(--line);color:var(--dim)}
+.legacy{color:var(--warn);border-color:var(--warn)}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}
+input[type=search]{background:var(--bg);border:1px solid var(--line);color:var(--fg);border-radius:6px;padding:.3rem .55rem;font:inherit;min-width:200px}
+button{background:var(--bg);border:1px solid var(--line);color:var(--fg);border-radius:6px;padding:.3rem .6rem;font:inherit;cursor:pointer}
+button:hover{border-color:var(--accent);color:var(--accent)}
+ul{margin:0;padding:.6rem .9rem;list-style:none;display:grid;gap:.45rem}
+li{display:flex;gap:.5rem;align-items:flex-start}
+li button{padding:0 .35rem;line-height:1.4;font-size:.75rem;flex:none}
+a{color:var(--accent);text-decoration:none;cursor:pointer}
+pre{margin:0;padding:.9rem;white-space:pre-wrap;word-break:break-word;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;max-height:60vh;overflow:auto}
+.empty{padding:.9rem;color:var(--dim)}
+</style>
+</head>
+<body>
+<header>
+  <h1>RagPilot</h1>
+  <span class="dim" id="root"></span>
+  <span style="flex:1"></span>
+  <span class="dim" id="updated"></span>
+  <button id="refresh">Refresh</button>
+</header>
+
+<main>
+  <section>
+    <div class="head">
+      <h2>Projects</h2>
+      <span class="dim" id="pcount"></span>
+      <span style="flex:1"></span>
+      <input type="search" id="filter" placeholder="filter…" autocomplete="off">
+    </div>
+    <div class="stats" id="pstats"></div>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Project</th><th>Layout</th><th class="num">Files</th><th class="num">Chunks</th><th class="num">Points</th><th class="num">Stale</th><th>Indexed</th><th class="num">KB</th></tr></thead>
+        <tbody id="ptable"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <div style="display:grid;gap:1.25rem;align-content:start">
+    <section>
+      <div class="head"><h2>Brain</h2><span class="dim" id="bname"></span><span style="flex:1"></span><button id="compile">Compile now</button></div>
+      <div class="stats" id="bstats"></div>
+      <div class="head"><h2>Rules</h2></div>
+      <ul id="rules"></ul>
+      <div class="head"><h2>Open threads</h2></div>
+      <ul id="threads"></ul>
+    </section>
+
+    <section>
+      <div class="head"><h2>Knowledge</h2><span class="dim" id="ncount"></span></div>
+      <ul id="notes"></ul>
+      <div id="noteview"></div>
+    </section>
+  </div>
+</main>
+
+<script>
+const T = "{{TOKEN}}";
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let STATE = null, POINTS = {};
+
+const api = (p, opt) => fetch(p + (p.includes('?') ? '&' : '?') + 't=' + T, opt).then(r => r.json());
+
+function stat(label, value, cls) {
+  return `<div class="stat"><b class="${cls||''}">${esc(value)}</b><span>${esc(label)}</span></div>`;
+}
+
+function renderProjects() {
+  const q = $('#filter').value.toLowerCase();
+  const rows = STATE.projects.filter(p => !q || (p.name + p.path + p.collection).toLowerCase().includes(q));
+  $('#pcount').textContent = rows.length + ' of ' + STATE.projects.length;
+
+  $('#ptable').innerHTML = rows.map(p => {
+    const pts = POINTS[p.id];
+    const ptsCell = pts === undefined ? '<span class="dim">…</span>' : (pts === 0 ? '<span class="bad">0</span>' : pts.toLocaleString());
+    const stale = p.dirty ? `<span class="warn">${p.dirty}</span>` : '<span class="ok">0</span>';
+    return `<tr>
+      <td title="${esc(p.path)}">${esc(p.name)}${p.exists ? '' : ' <span class="tag bad">gone</span>'}</td>
+      <td><span class="tag ${p.layout === 'legacy' ? 'legacy' : ''}">${esc(p.layout)}</span></td>
+      <td class="num">${p.files.toLocaleString()}</td>
+      <td class="num">${p.chunks.toLocaleString()}</td>
+      <td class="num">${ptsCell}</td>
+      <td class="num">${stale}</td>
+      <td class="dim">${esc(p.indexed_at || '—')}</td>
+      <td class="num dim">${p.data_kb.toLocaleString()}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="8" class="empty">No projects registered.</td></tr>';
+
+  const dirty = STATE.projects.filter(p => p.dirty > 0).length;
+  const gone = STATE.projects.filter(p => !p.exists).length;
+  $('#pstats').innerHTML =
+    stat('projects', STATE.projects.length) +
+    stat('legacy', STATE.legacy_count, STATE.legacy_count ? 'warn' : 'ok') +
+    stat('stale index', dirty, dirty ? 'warn' : 'ok') +
+    stat('missing folder', gone, gone ? 'bad' : 'ok');
+}
+
+function renderBrain() {
+  const b = STATE.brain;
+  if (!b.exists) {
+    $('#bstats').innerHTML = '<div class="empty">No brain yet — run <code>ragpilot brain init</code>.</div>';
+    return;
+  }
+  $('#bname').textContent = b.name;
+  $('#bstats').innerHTML =
+    stat('rules', b.rules.length) +
+    stat('open threads', b.threads.length) +
+    stat('notes', b.notes.length) +
+    stat('days logged', b.days) +
+    stat('sessions today', b.sessions_today) +
+    stat('schedule', b.scheduled ? b.schedule : 'manual', b.scheduled ? 'ok' : 'warn');
+
+  $('#rules').innerHTML = b.rules.map(r => `<li>${esc(r)}</li>`).join('') || '<li class="dim">None yet. Correct it and it will remember.</li>';
+  $('#threads').innerHTML = b.threads.map(t =>
+    `<li><button data-close="${esc(t)}" title="close">✓</button><span>${esc(t)}</span></li>`
+  ).join('') || '<li class="dim">Nothing open.</li>';
+
+  $('#ncount').textContent = b.notes.length + ' notes · ' + b.skills.length + ' skills';
+  $('#notes').innerHTML = b.notes.map(n =>
+    `<li><a data-note="${esc(n.slug)}">${esc(n.title)}</a> <span class="dim">${esc(n.updated)}</span></li>`
+  ).join('') || '<li class="dim">Nothing compiled yet.</li>';
+}
+
+async function load() {
+  STATE = await api('/api/state');
+  $('#root').textContent = STATE.data_root;
+  $('#updated').textContent = 'updated ' + new Date().toLocaleTimeString();
+  renderProjects(); renderBrain();
+  POINTS = await api('/api/points');   // slower: Qdrant
+  renderProjects();
+}
+
+$('#refresh').onclick = load;
+$('#filter').oninput = () => STATE && renderProjects();
+$('#compile').onclick = async e => {
+  e.target.disabled = true; e.target.textContent = 'Compiling…';
+  await api('/api/compile', { method: 'POST' });
+  setTimeout(() => { e.target.disabled = false; e.target.textContent = 'Compile now'; load(); }, 20000);
+};
+document.addEventListener('click', async e => {
+  const close = e.target.closest('[data-close]');
+  if (close) { await api('/api/thread/close', { method: 'POST', body: JSON.stringify({ text: close.dataset.close }) }); return load(); }
+  const note = e.target.closest('[data-note]');
+  if (note) {
+    const r = await api('/api/note?slug=' + encodeURIComponent(note.dataset.note));
+    $('#noteview').innerHTML = '<pre>' + esc(r.text || '') + '</pre>';
+    $('#noteview').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+});
+load();
+setInterval(load, 60000);
+</script>
+</body>
+</html>

@@ -133,6 +133,7 @@ pub fn update_threads(open: &[String], closed: &[String]) -> Result<PathBuf> {
     let today = today();
 
     for item in closed {
+        let item = strip_opened(item);
         let item = item.trim();
         if item.is_empty() {
             continue;
@@ -151,6 +152,9 @@ pub fn update_threads(open: &[String], closed: &[String]) -> Result<PathBuf> {
     }
 
     for item in open {
+        // Strip before comparing *and* before stamping, so a thread that came
+        // back through the loop is recognised rather than stamped twice.
+        let item = strip_opened(item);
         let item = item.trim();
         if item.is_empty() || active.iter().any(|a| similar(a, item)) {
             continue;
@@ -193,11 +197,28 @@ fn split_threads(text: &str) -> (Vec<String>, Vec<String>) {
     (body(ACTIVE_HEADING), body(CLOSED_HEADING))
 }
 
+/// Drop any `(opened …)` / `(closed …)` stamp, wherever it sits.
+///
+/// The stamp leaks back in: `session-start` prints threads with it, that lands
+/// in the transcript, and `session-end` summarises it straight back — so an
+/// incoming item may already carry one, sometimes several, and may have
+/// punctuation after it. Anything that keeps a stamp in the text is a thread
+/// that will never match its own earlier self again.
 fn strip_opened(line: &str) -> String {
-    match line.rfind(" (opened ") {
-        Some(i) if line.ends_with(')') => line[..i].to_string(),
-        _ => line.to_string(),
+    let mut out = line.to_string();
+    loop {
+        let Some(start) = ["(opened ", "(closed "]
+            .iter()
+            .filter_map(|marker| out.rfind(marker))
+            .max()
+        else {
+            break;
+        };
+        let Some(rel_end) = out[start..].find(')') else { break };
+        out.replace_range(start..start + rel_end + 1, "");
+        out = out.trim().trim_end_matches(['.', ',', ';']).trim().to_string();
     }
+    out.trim().to_string()
 }
 
 /// Loose match: same text ignoring case, punctuation and the trailing stamp.
@@ -737,11 +758,29 @@ mod rules_and_threads_tests {
     }
 
     #[test]
-    fn strip_opened_removes_only_a_trailing_stamp() {
+    fn strip_opened_survives_a_stamp_that_came_back_through_the_loop() {
         assert_eq!(strip_opened("a thing (opened 2026-08-01)"), "a thing");
         assert_eq!(strip_opened("a thing"), "a thing");
-        // Not a stamp: left alone.
-        assert_eq!(strip_opened("a thing (opened by hand) and more"), "a thing (opened by hand) and more");
+
+        // The shape seen live: session-start printed the stamp, the model
+        // summarised it back, and it was stamped a second time.
+        assert_eq!(
+            strip_opened("a thing (opened 2026-08-27). (opened 2026-08-27)"),
+            "a thing"
+        );
+        assert_eq!(strip_opened("a thing (closed 2026-08-01)"), "a thing");
+        // Trailing punctuation after a stamp goes with it.
+        assert_eq!(strip_opened("a thing (opened 2026-08-01),"), "a thing");
+    }
+
+    #[test]
+    fn a_thread_that_comes_back_stamped_is_not_added_twice() {
+        let stamped = "migrate needs a --keep flag (opened 2026-08-27)";
+        let plain = "migrate needs a --keep flag";
+        assert!(similar(stamped, plain));
+        assert!(similar(plain, stamped));
+        // …and doubly stamped, which is what actually appeared.
+        assert!(similar("migrate needs a --keep flag (opened 2026-08-27). (opened 2026-08-27)", plain));
     }
 }
 
