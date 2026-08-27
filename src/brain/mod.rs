@@ -27,6 +27,7 @@ pub mod config;
 pub mod doctor;
 pub mod engine;
 pub mod hooks;
+pub mod import;
 pub mod runtime;
 pub mod schedule;
 pub mod session;

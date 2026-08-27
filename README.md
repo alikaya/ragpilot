@@ -161,6 +161,9 @@ Add to `.claude/settings.json`:
 | `ragpilot status` | Show index statistics |
 | `ragpilot clean [--yes]` | Delete the Qdrant collection |
 | `ragpilot hooks` | Install git `post-commit` / `post-merge` hooks |
+| `ragpilot migrate [--keep]` | Move a legacy `.rag/` project into the global data directory |
+| `ragpilot projects list\|rm\|relink` | Manage registered projects |
+| `ragpilot brain <subcommand>` | The second brain — see [docs/brain.md](docs/brain.md) |
 | `ragpilot doctor` | Check installation and configuration |
 | `ragpilot --mcp-server` | Start the MCP server over stdio |
 
@@ -195,6 +198,33 @@ AI agents use these tools automatically:
 | `nav_call_graph` | BFS call tree (incoming + outgoing) |
 | `impact_analyze` | Pre-refactor impact analysis |
 | `context_bundle` | Token-budgeted complete context bundle |
+| `brain_load` | Second-brain context for the start of a session |
+| `brain_search` | Semantic search across the second brain |
+| `brain_note` | Record a decision or a fact, searchable immediately |
+| `brain_flush` | Write the session summary to the brain |
+
+---
+
+## Second brain
+
+RagPilot can also keep a **second brain**: a persistent memory that belongs to
+you and your machine rather than to a repository. It is markdown in a git repo —
+readable, greppable and revertible without RagPilot in the picture.
+
+Sessions stop starting from nothing. When one opens, the agent is handed who you
+are, what was left half-done and what was already decided. When it closes, the
+session is summarised and written back down. A nightly compiler distils the logs
+into knowledge notes; it only ever adds, and marks conflicting information
+instead of overwriting it.
+
+```bash
+ragpilot brain init          # create the vault
+ragpilot brain hooks         # wire it into Claude Code (or: ragpilot init . <agent>)
+ragpilot brain import ~/Downloads/conversations.json   # bring your history in
+```
+
+**Point your agent at [docs/brain.md](docs/brain.md) and it will set this up for
+you** — the file is written to be executed, not just read.
 
 ---
 

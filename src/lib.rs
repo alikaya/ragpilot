@@ -112,12 +112,26 @@ async fn dispatch(observer: Option<Arc<dyn ToolObserver>>) -> anyhow::Result<()>
                     brain::compile::cmd_compile(light, engine.as_deref()).await
                 }
                 Some("schedule") => brain::schedule::cmd_schedule(&args),
+                Some("import") => {
+                    let target = args
+                        .get(3)
+                        .filter(|a| !a.starts_with('-'))
+                        .ok_or_else(|| anyhow::anyhow!(
+                            "Usage: ragpilot brain import <file|dir> [--limit N] [--since YYYY-MM-DD]"
+                        ))?;
+                    let opts = brain::import::ImportOptions {
+                        limit: flag_value(&args, "--limit").and_then(|v| v.parse().ok()),
+                        since: flag_value(&args, "--since"),
+                        engine: engine.clone(),
+                    };
+                    brain::import::cmd_import(std::path::Path::new(target), opts).await
+                }
                 Some("doctor") => {
                     let fix = args.iter().any(|a| a == "--fix");
                     brain::doctor::cmd_doctor(fix).await
                 }
                 other => anyhow::bail!(
-                    "Unknown brain subcommand {:?}. Usage: ragpilot brain [init | index | compile | doctor | schedule | hooks | session-start | session-end] [--engine <name>] [--light] [--fix]\n  Engines: {}",
+                    "Unknown brain subcommand {:?}. Usage: ragpilot brain [init | index | compile | import | doctor | schedule | hooks | session-start | session-end] [--engine <name>] [--light] [--fix]\n  Engines: {}",
                     other.unwrap_or("(none)"),
                     brain::engine::ENGINE_NAMES.join(", ")
                 ),
@@ -145,6 +159,7 @@ async fn dispatch(observer: Option<Arc<dyn ToolObserver>>) -> anyhow::Result<()>
                    ragpilot brain init [--engine <name>]  Set up the second-brain vault\n\
                    ragpilot brain index            Re-index the brain vault\n\
                    ragpilot brain compile [--light]  Distil daily logs into knowledge notes\n\
+                   ragpilot brain import <path>    Import a chat archive (ChatGPT/Claude/Codex/md)\n\
                    ragpilot brain doctor [--fix]   Check the vault and repair what is safe\n\
                    ragpilot brain schedule [--install|--remove|--print]  Daily compile\n\
                    ragpilot brain hooks            Install the Claude Code session hooks here\n\

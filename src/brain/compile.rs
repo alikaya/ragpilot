@@ -67,6 +67,7 @@ Rules:
 
 // ── entry point ────────────────────────────────────────────────────────────
 
+#[derive(Default)]
 pub struct CompileReport {
     pub sources: Vec<String>,
     pub notes_created: Vec<String>,
@@ -79,6 +80,78 @@ pub struct CompileReport {
 
 /// Compile everything new. `light` restricts the run to today's daily — the
 /// cheap end-of-session pass rather than the full nightly one.
+/// One model call: digest raw material into staged notes.
+///
+/// Shared by `compile` and `import` so both go through the same parser, the
+/// same staging discipline and the same never-delete rules.
+pub(super) struct Distiller<'a> {
+    engine: &'a dyn super::engine::CompilerEngine,
+    staging: PathBuf,
+}
+
+impl<'a> Distiller<'a> {
+    pub(super) fn new(engine: &'a dyn super::engine::CompilerEngine) -> Self {
+        let staging = super::dir().join(STAGING);
+        let _ = std::fs::remove_dir_all(&staging);
+        Self { engine, staging }
+    }
+
+    /// The slugs already in the brain, prepended to every call.
+    pub(super) fn index_header(&self) -> String {
+        existing_index()
+    }
+
+    /// Digest one chunk. A chunk whose output does not parse is skipped whole
+    /// and recorded in the report — never half-applied.
+    pub(super) async fn digest(
+        &self,
+        label: &str,
+        input: &str,
+        report: &mut CompileReport,
+    ) -> Result<()> {
+        let raw = match self
+            .engine
+            .complete(CompileRequest {
+                system: COMPILER_PROMPT,
+                input,
+                max_output_tokens: 4_000,
+            })
+            .await
+        {
+            Ok(text) => text,
+            Err(e) => {
+                report.skipped_chunks.push(format!("{label}: {e}"));
+                return Ok(());
+            }
+        };
+
+        match Output::parse(&raw) {
+            Ok(output) if output.is_empty() => Ok(()),
+            Ok(output) => apply(&output, &self.staging, report),
+            Err(why) => {
+                report.skipped_chunks.push(format!("{label}: {why}"));
+                Ok(())
+            }
+        }
+    }
+
+    /// Move everything staged into the vault. Called once, after every chunk
+    /// has been through `digest`.
+    pub(super) fn finish(self) -> Result<()> {
+        promote(&self.staging)?;
+        let _ = std::fs::remove_dir_all(&self.staging);
+        Ok(())
+    }
+}
+
+/// Index the vault and commit — the tail every distilling run shares.
+pub(super) async fn index_and_commit() -> bool {
+    if let Ok(rt) = super::runtime::runtime().await {
+        let _ = rt.orchestrator.ensure_index(false).await;
+    }
+    commit()
+}
+
 pub async fn cmd_compile(light: bool, engine_override: Option<&str>) -> Result<()> {
     if !super::exists() {
         anyhow::bail!("No brain at {} — run `ragpilot brain init` first.", super::dir().display());
@@ -90,15 +163,7 @@ pub async fn cmd_compile(light: bool, engine_override: Option<&str>) -> Result<(
 }
 
 async fn run(cfg: &BrainConfig, light: bool, engine_override: Option<&str>) -> Result<CompileReport> {
-    let mut report = CompileReport {
-        sources: Vec::new(),
-        notes_created: Vec::new(),
-        notes_updated: Vec::new(),
-        skills: Vec::new(),
-        contradictions: Vec::new(),
-        skipped_chunks: Vec::new(),
-        committed: false,
-    };
+    let mut report = CompileReport::default();
 
     let mut state = CompileState::load();
     let pending = gather(&state, light)?;
@@ -127,41 +192,14 @@ async fn run(cfg: &BrainConfig, light: bool, engine_override: Option<&str>) -> R
         engine.name()
     );
 
-    // Parse every chunk before touching anything: a chunk that does not parse
-    // is skipped whole, and a chunk that does is applied whole.
-    let mut plans = Vec::new();
+    let distiller = Distiller::new(engine.as_ref());
+    let total = chunks.len();
     for (i, body) in chunks.iter().enumerate() {
-        let raw = match engine
-            .complete(CompileRequest {
-                system: COMPILER_PROMPT,
-                input: body,
-                max_output_tokens: 4_000,
-            })
-            .await
-        {
-            Ok(text) => text,
-            Err(e) => {
-                report.skipped_chunks.push(format!("chunk {}/{}: {e}", i + 1, chunks.len()));
-                continue;
-            }
-        };
-
-        match Output::parse(&raw) {
-            Ok(output) if output.is_empty() => {}
-            Ok(output) => plans.push(output),
-            Err(why) => report
-                .skipped_chunks
-                .push(format!("chunk {}/{}: {why}", i + 1, chunks.len())),
-        }
+        distiller
+            .digest(&format!("chunk {}/{total}", i + 1), body, &mut report)
+            .await?;
     }
-
-    let staging = super::dir().join(STAGING);
-    let _ = std::fs::remove_dir_all(&staging);
-    for output in &plans {
-        apply(output, &staging, &mut report)?;
-    }
-    promote(&staging)?;
-    let _ = std::fs::remove_dir_all(&staging);
+    distiller.finish()?;
 
     // Only mark sources compiled once their output is safely on disk.
     for source in &pending {
@@ -169,11 +207,7 @@ async fn run(cfg: &BrainConfig, light: bool, engine_override: Option<&str>) -> R
     }
     state.save();
 
-    if let Ok(rt) = super::runtime::runtime().await {
-        let _ = rt.orchestrator.ensure_index(false).await;
-    }
-    report.committed = commit();
-
+    report.committed = index_and_commit().await;
     Ok(report)
 }
 
@@ -585,7 +619,7 @@ fn commit() -> bool {
         .unwrap_or(false)
 }
 
-fn print_report(r: &CompileReport) {
+pub(super) fn print_report(r: &CompileReport) {
     if r.sources.is_empty() {
         return;
     }
