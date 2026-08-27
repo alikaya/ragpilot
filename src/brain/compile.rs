@@ -346,7 +346,11 @@ fn existing_index() -> String {
                         .map(|l| l.trim_start_matches("# ").trim().to_string())
                 })
                 .unwrap_or_else(|| title_from(&slug));
-            lines.push(format!("- {area}/{slug} — {title}"));
+            // The slug stands alone. Writing it as `knowledge/<slug>` reads as
+            // part of the name to a model that is being asked for a slug, and
+            // it dutifully answers `knowledge/<slug>` — which then slugifies
+            // into a `knowledge-` prefixed duplicate of the note it meant.
+            lines.push(format!("- {slug}  ({area}) — {title}"));
         }
     }
 
@@ -469,7 +473,21 @@ fn split_list(raw: &str) -> Vec<String> {
 }
 
 /// Reduce free text to a file-name-safe slug.
+///
+/// An area prefix is dropped first: a model handed an index of notes sometimes
+/// answers with the path it was shown rather than the name, and
+/// `knowledge/foo` must resolve to `foo`, not to a new note called
+/// `knowledge-foo` sitting beside it.
 fn slugify(raw: &str) -> String {
+    let raw = raw.trim();
+    // Only the path form is stripped. `knowledge-something` is a perfectly
+    // good slug for a note about knowledge, and cutting it would invent a
+    // different note than the one meant.
+    let raw = ["knowledge/", "skills/"]
+        .iter()
+        .find_map(|p| raw.strip_prefix(p))
+        .unwrap_or(raw);
+
     let mut out = String::new();
     let mut dash = false;
     for ch in raw.trim().chars() {
@@ -786,6 +804,26 @@ CONTRADICTS: markdown-source-of-truth | the new material claims Qdrant is author
         // Nothing at all is valid and empty, not an error.
         let nothing = Output::parse("I found nothing worth recording.").unwrap();
         assert!(nothing.is_empty());
+    }
+
+    #[test]
+    fn slugify_drops_an_area_prefix_the_model_echoed_back() {
+        // The shape that created five duplicate notes before the index format
+        // was fixed: the model answered with what it was shown.
+        assert_eq!(slugify("knowledge/enterprise-core-binary-deployment"), "enterprise-core-binary-deployment");
+        assert_eq!(slugify("skills/verify-a-phase"), "verify-a-phase");
+        // A slug that merely begins with the word is left alone — cutting it
+        // would invent a different note than the one meant.
+        assert_eq!(slugify("knowledge-brain-rules"), "knowledge-brain-rules");
+        assert_eq!(slugify("knowledge base design"), "knowledge-base-design");
+    }
+
+    #[test]
+    fn the_existing_index_lists_slugs_not_paths() {
+        // Regression: `knowledge/<slug>` in the index reads as the name.
+        let line = format!("- {}  ({}) — {}", "a-note", "knowledge", "A Note");
+        assert!(line.starts_with("- a-note"), "{line}");
+        assert!(!line.contains("knowledge/"), "{line}");
     }
 
     #[test]
