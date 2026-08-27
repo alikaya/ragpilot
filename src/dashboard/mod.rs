@@ -83,6 +83,11 @@ impl Server {
                 let points = state::collection_points(&projects).await;
                 Response::json(serde_json::to_string(&points).unwrap_or_else(|_| "{}".into()))
             }
+            ("GET", "/api/vault") => Response::json(
+                serde_json::to_string(&state::vault_sections()).unwrap_or_else(|_| "[]".into()),
+            ),
+            ("GET", "/api/file") => self.file(&req),
+            ("GET", "/api/search") => self.search(&req).await,
             ("GET", "/api/note") => self.note(&req),
             ("POST", "/api/thread/close") => self.close_thread(&req),
             ("POST", "/api/compile") => self.compile(),
@@ -110,6 +115,57 @@ impl Server {
         match std::fs::read_to_string(dir.join(format!("{slug}.md"))) {
             Ok(text) => Response::json(serde_json::json!({ "slug": slug, "text": text }).to_string()),
             Err(e) => Response::text(404, &format!("no such note: {e}")),
+        }
+    }
+
+    /// Any file in the vault, by its path relative to the vault root.
+    ///
+    /// Containment is delegated to `resolve_in_root` — the same guard the MCP
+    /// file tools use, hardened against `..` and symlink escapes and covered by
+    /// its own tests. A second, home-grown check here would be a second thing
+    /// to get wrong.
+    fn file(&self, req: &Request) -> Response {
+        let Some(rel) = req.query.get("path") else {
+            return Response::text(400, "missing path");
+        };
+        let root = crate::brain::dir();
+        let path = match crate::mcp::tools::resolve_in_root(&root, rel) {
+            Ok(path) => path,
+            Err(why) => return Response::text(400, &why),
+        };
+        match std::fs::read_to_string(&path) {
+            Ok(text) => Response::json(
+                serde_json::json!({ "path": rel, "text": text }).to_string(),
+            ),
+            Err(e) => Response::text(404, &format!("cannot read: {e}")),
+        }
+    }
+
+    /// Semantic search over the vault. The first call loads the embedding
+    /// model, so it is slower than the rest of the page by design.
+    async fn search(&self, req: &Request) -> Response {
+        let Some(query) = req.query.get("q").filter(|q| !q.trim().is_empty()) else {
+            return Response::json("[]".to_string());
+        };
+        let runtime = match crate::brain::runtime::runtime().await {
+            Ok(runtime) => runtime,
+            Err(e) => return Response::text(400, &e.to_string()),
+        };
+        match runtime.search(query, 12, None).await {
+            Ok(hits) => {
+                let items: Vec<serde_json::Value> = hits
+                    .iter()
+                    .map(|hit| {
+                        serde_json::json!({
+                            "path": hit.chunk.source,
+                            "score": (hit.score * 1000.0).round() / 1000.0,
+                            "snippet": hit.chunk.content.chars().take(300).collect::<String>(),
+                        })
+                    })
+                    .collect();
+                Response::json(serde_json::to_string(&items).unwrap_or_else(|_| "[]".into()))
+            }
+            Err(e) => Response::text(500, &format!("search failed: {e}")),
         }
     }
 

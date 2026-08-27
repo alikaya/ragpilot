@@ -38,18 +38,38 @@ li button{padding:0 .35rem;line-height:1.4;font-size:.75rem;flex:none}
 a{color:var(--accent);text-decoration:none;cursor:pointer}
 pre{margin:0;padding:.9rem;white-space:pre-wrap;word-break:break-word;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;max-height:60vh;overflow:auto}
 .empty{padding:.9rem;color:var(--dim)}
+nav.views{display:flex;gap:.3rem}
+nav.views button{border-color:transparent;color:var(--dim)}
+nav.views button.on{border-color:var(--line);color:var(--fg);background:var(--panel)}
+.brain{display:grid;grid-template-columns:1fr;gap:1.25rem}
+@media(min-width:1000px){.brain{grid-template-columns:230px 300px 1fr}}
+.list{max-height:70vh;overflow:auto}
+.list a{display:flex;justify-content:space-between;gap:.6rem;padding:.35rem .9rem;border-top:1px solid var(--line);color:var(--fg)}
+.list a:first-child{border-top:none}
+.list a:hover{background:rgba(127,127,127,.1)}
+.list a.on{background:rgba(88,166,255,.14);color:var(--accent)}
+.list .m{color:var(--dim);font-size:.72rem;white-space:nowrap}
+.hit{padding:.5rem .9rem;border-top:1px solid var(--line);cursor:pointer}
+.hit:hover{background:rgba(127,127,127,.1)}
+.hit .p{color:var(--accent);font-size:.8rem}
+.hit .s{color:var(--dim);font-size:.75rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.hide{display:none}
 </style>
 </head>
 <body>
 <header>
   <h1>RagPilot</h1>
+  <nav class="views">
+    <button data-view="projects" class="on">Projects</button>
+    <button data-view="brain">Brain</button>
+  </nav>
   <span class="dim" id="root"></span>
   <span style="flex:1"></span>
   <span class="dim" id="updated"></span>
   <button id="refresh">Refresh</button>
 </header>
 
-<main>
+<main id="v-projects">
   <section>
     <div class="head">
       <h2>Projects</h2>
@@ -65,21 +85,31 @@ pre{margin:0;padding:.9rem;white-space:pre-wrap;word-break:break-word;font:12px/
       </table>
     </div>
   </section>
+</main>
 
-  <div style="display:grid;gap:1.25rem;align-content:start">
+<main id="v-brain" class="hide" style="grid-template-columns:1fr">
+  <section>
+    <div class="head">
+      <h2>Brain</h2><span class="dim" id="bname"></span>
+      <span style="flex:1"></span>
+      <input type="search" id="bsearch" placeholder="search the brain…" autocomplete="off">
+      <button id="compile">Compile now</button>
+    </div>
+    <div class="stats" id="bstats"></div>
+  </section>
+
+  <div class="brain">
     <section>
-      <div class="head"><h2>Brain</h2><span class="dim" id="bname"></span><span style="flex:1"></span><button id="compile">Compile now</button></div>
-      <div class="stats" id="bstats"></div>
-      <div class="head"><h2>Rules</h2></div>
-      <ul id="rules"></ul>
-      <div class="head"><h2>Open threads</h2></div>
-      <ul id="threads"></ul>
+      <div class="head"><h2>Vault</h2></div>
+      <div class="list" id="sections"></div>
     </section>
-
     <section>
-      <div class="head"><h2>Knowledge</h2><span class="dim" id="ncount"></span></div>
-      <ul id="notes"></ul>
-      <div id="noteview"></div>
+      <div class="head"><h2 id="entries-label">Files</h2><span class="dim" id="ecount"></span></div>
+      <div class="list" id="entries"></div>
+    </section>
+    <section>
+      <div class="head"><h2 id="file-label">Content</h2></div>
+      <div id="fileview"><div class="empty">Pick a file.</div></div>
     </section>
   </div>
 </main>
@@ -88,14 +118,19 @@ pre{margin:0;padding:.9rem;white-space:pre-wrap;word-break:break-word;font:12px/
 const T = "{{TOKEN}}";
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-let STATE = null, POINTS = {};
+let STATE = null, POINTS = {}, VAULT = [], SECTION = 'identity';
 
 const api = (p, opt) => fetch(p + (p.includes('?') ? '&' : '?') + 't=' + T, opt).then(r => r.json());
+const stat = (label, value, cls) => `<div class="stat"><b class="${cls||''}">${esc(value)}</b><span>${esc(label)}</span></div>`;
 
-function stat(label, value, cls) {
-  return `<div class="stat"><b class="${cls||''}">${esc(value)}</b><span>${esc(label)}</span></div>`;
-}
+/* ── views ─────────────────────────────────────────── */
+document.querySelectorAll('nav.views button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav.views button').forEach(x => x.classList.toggle('on', x === b));
+  $('#v-projects').classList.toggle('hide', b.dataset.view !== 'projects');
+  $('#v-brain').classList.toggle('hide', b.dataset.view !== 'brain');
+});
 
+/* ── projects ──────────────────────────────────────── */
 function renderProjects() {
   const q = $('#filter').value.toLowerCase();
   const rows = STATE.projects.filter(p => !q || (p.name + p.path + p.collection).toLowerCase().includes(q));
@@ -126,13 +161,14 @@ function renderProjects() {
     stat('missing folder', gone, gone ? 'bad' : 'ok');
 }
 
+/* ── brain ─────────────────────────────────────────── */
 function renderBrain() {
   const b = STATE.brain;
   if (!b.exists) {
     $('#bstats').innerHTML = '<div class="empty">No brain yet — run <code>ragpilot brain init</code>.</div>';
     return;
   }
-  $('#bname').textContent = b.name;
+  $('#bname').textContent = b.name + ' · ' + b.engine + ' · compile ' + b.compile_model + ' · flush ' + b.flush_model;
   $('#bstats').innerHTML =
     stat('rules', b.rules.length) +
     stat('open threads', b.threads.length) +
@@ -140,44 +176,107 @@ function renderBrain() {
     stat('days logged', b.days) +
     stat('sessions today', b.sessions_today) +
     stat('schedule', b.scheduled ? b.schedule : 'manual', b.scheduled ? 'ok' : 'warn');
-
-  $('#rules').innerHTML = b.rules.map(r => `<li>${esc(r)}</li>`).join('') || '<li class="dim">None yet. Correct it and it will remember.</li>';
-  $('#threads').innerHTML = b.threads.map(t =>
-    `<li><button data-close="${esc(t)}" title="close">✓</button><span>${esc(t)}</span></li>`
-  ).join('') || '<li class="dim">Nothing open.</li>';
-
-  $('#ncount').textContent = b.notes.length + ' notes · ' + b.skills.length + ' skills';
-  $('#notes').innerHTML = b.notes.map(n =>
-    `<li><a data-note="${esc(n.slug)}">${esc(n.title)}</a> <span class="dim">${esc(n.updated)}</span></li>`
-  ).join('') || '<li class="dim">Nothing compiled yet.</li>';
 }
 
+function renderSections() {
+  $('#sections').innerHTML = VAULT.map(s =>
+    `<a data-section="${esc(s.key)}" class="${s.key === SECTION ? 'on' : ''}">${esc(s.label)}<span class="m">${s.count ?? s.entries.length}</span></a>`
+  ).join('');
+  renderEntries();
+}
+
+function renderEntries() {
+  const section = VAULT.find(s => s.key === SECTION);
+  $('#entries-label').textContent = section ? section.label : 'Files';
+  $('#ecount').textContent = section ? section.entries.length + ' files' : '';
+
+  // Rules and open threads are lists, not files — show them as themselves.
+  if (SECTION === 'live') {
+    const b = STATE.brain;
+    $('#entries').innerHTML =
+      '<a data-live="rules">Rules<span class="m">' + b.rules.length + '</span></a>' +
+      '<a data-live="threads">Open threads<span class="m">' + b.threads.length + '</span></a>';
+    return;
+  }
+  $('#entries').innerHTML = (section ? section.entries : []).map(e =>
+    `<a data-path="${esc(e.path)}" title="${esc(e.path)}">${esc(e.title)}<span class="m">${esc(e.meta)}</span></a>`
+  ).join('') || '<div class="empty">Empty.</div>';
+}
+
+function showLive(which) {
+  const b = STATE.brain;
+  $('#file-label').textContent = which === 'rules' ? 'Rules' : 'Open threads';
+  if (which === 'rules') {
+    $('#fileview').innerHTML = '<ul>' + (b.rules.map(r => `<li>${esc(r)}</li>`).join('')
+      || '<li class="dim">None yet. Correct it and it will remember.</li>') + '</ul>';
+  } else {
+    $('#fileview').innerHTML = '<ul>' + (b.threads.map(t =>
+      `<li><button data-close="${esc(t)}" title="close">✓</button><span>${esc(t)}</span></li>`
+    ).join('') || '<li class="dim">Nothing open.</li>') + '</ul>';
+  }
+}
+
+async function showFile(path) {
+  const r = await api('/api/file?path=' + encodeURIComponent(path));
+  $('#file-label').textContent = path;
+  $('#fileview').innerHTML = '<pre>' + esc(r.text || r) + '</pre>';
+}
+
+async function search(q) {
+  if (!q.trim()) { renderEntries(); return; }
+  $('#entries-label').textContent = 'Search';
+  $('#ecount').textContent = 'searching…';
+  const hits = await api('/api/search?q=' + encodeURIComponent(q));
+  if (!Array.isArray(hits)) { $('#ecount').textContent = 'unavailable'; return; }
+  $('#ecount').textContent = hits.length + ' hits';
+  $('#entries').innerHTML = hits.map(h =>
+    `<div class="hit" data-path="${esc(h.path)}"><div class="p">${esc(h.path)} <span class="m">${h.score.toFixed(3)}</span></div><div class="s">${esc(h.snippet)}</div></div>`
+  ).join('') || '<div class="empty">Nothing found.</div>';
+}
+
+/* ── wiring ────────────────────────────────────────── */
 async function load() {
   STATE = await api('/api/state');
   $('#root').textContent = STATE.data_root;
   $('#updated').textContent = 'updated ' + new Date().toLocaleTimeString();
   renderProjects(); renderBrain();
-  POINTS = await api('/api/points');   // slower: Qdrant
+
+  VAULT = await api('/api/vault');
+  // A pseudo-section: rules and open threads are lists, not files, but they
+  // are the first thing anyone opens the brain to look at.
+  VAULT.unshift({ key: 'live', label: 'Rules & threads', entries: [], count: STATE.brain.rules.length + STATE.brain.threads.length });
+  renderSections();
+
+  POINTS = await api('/api/points');
   renderProjects();
 }
 
 $('#refresh').onclick = load;
 $('#filter').oninput = () => STATE && renderProjects();
+let timer; $('#bsearch').oninput = e => { clearTimeout(timer); const q = e.target.value; timer = setTimeout(() => search(q), 350); };
 $('#compile').onclick = async e => {
   e.target.disabled = true; e.target.textContent = 'Compiling…';
   await api('/api/compile', { method: 'POST' });
   setTimeout(() => { e.target.disabled = false; e.target.textContent = 'Compile now'; load(); }, 20000);
 };
+
 document.addEventListener('click', async e => {
-  const close = e.target.closest('[data-close]');
-  if (close) { await api('/api/thread/close', { method: 'POST', body: JSON.stringify({ text: close.dataset.close }) }); return load(); }
-  const note = e.target.closest('[data-note]');
-  if (note) {
-    const r = await api('/api/note?slug=' + encodeURIComponent(note.dataset.note));
-    $('#noteview').innerHTML = '<pre>' + esc(r.text || '') + '</pre>';
-    $('#noteview').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  const section = e.target.closest('[data-section]');
+  if (section) { SECTION = section.dataset.section; $('#bsearch').value = ''; renderSections(); return; }
+
+  const live = e.target.closest('[data-live]');
+  if (live) { document.querySelectorAll('#entries a').forEach(a => a.classList.toggle('on', a === live)); showLive(live.dataset.live); return; }
+
+  const file = e.target.closest('[data-path]');
+  if (file) {
+    document.querySelectorAll('#entries a').forEach(a => a.classList.toggle('on', a === file));
+    return showFile(file.dataset.path);
   }
+
+  const close = e.target.closest('[data-close]');
+  if (close) { await api('/api/thread/close', { method: 'POST', body: JSON.stringify({ text: close.dataset.close }) }); await load(); showLive('threads'); }
 });
+
 load();
 setInterval(load, 60000);
 </script>

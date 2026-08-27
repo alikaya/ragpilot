@@ -27,11 +27,14 @@ All notable changes to **ragpilot** are documented here. The format is based on
 
 ### Added
 - **`ragpilot dashboard`** — a local window onto the project fleet and the
-  brain: every registered project with its layout, index freshness, chunk and
-  point counts, beside the brain's rules, open threads and compiled notes. Read
-  a note, close a thread, start a compile. Loopback only, gated by a token
-  minted at startup, no build step and no web framework — the page is embedded
-  and served over a small hand-written HTTP layer, so the crate stays lean.
+  brain, in two views. **Projects**: layout, index freshness, chunk and point
+  counts per project. **Brain**: the whole vault browsable — persona, rules,
+  open threads, daily logs, knowledge, skills, inbox, archive — with semantic
+  search across all of it. Read any file in place, close a finished thread,
+  start a compile. Loopback only, gated by a token minted at startup, no build
+  step and no web framework: the page is embedded and served over a small
+  hand-written HTTP layer, so the crate stays lean. File reads go through
+  `resolve_in_root`, the same guard the MCP file tools use.
 - **Rules that accumulate.** `brain_note` with `kind: "rule"` records a
   correction — and the reason for it — in `rules.md`, which loads at the start
   of every session ahead of anything situational. A correction now only has to

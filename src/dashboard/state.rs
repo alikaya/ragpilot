@@ -276,3 +276,110 @@ mod tests {
         assert_eq!(out, vec!["answer first — no warm-up", "read before writing"]);
     }
 }
+
+// ── vault browsing ─────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+pub struct Entry {
+    /// Path relative to the vault root — what `/api/file` takes back.
+    pub path: String,
+    pub title: String,
+    pub meta: String,
+}
+
+#[derive(Serialize)]
+pub struct Section {
+    pub key: String,
+    pub label: String,
+    pub entries: Vec<Entry>,
+}
+
+/// The vault as a browsable tree: every file a reader would want, in the order
+/// a reader wants them.
+pub fn vault_sections() -> Vec<Section> {
+    let root = brain::dir();
+    let mut out = Vec::new();
+
+    let single = |path: std::path::PathBuf, label: &str| -> Option<Entry> {
+        path.exists().then(|| Entry {
+            path: rel(&root, &path),
+            title: label.to_string(),
+            meta: modified(&path),
+        })
+    };
+
+    let mut identity = Vec::new();
+    identity.extend(single(brain::persona_path(), "persona.md"));
+    identity.extend(single(brain::vault::rules_path(), "rules.md"));
+    identity.extend(single(brain::vault::threads_path(), "threads.md"));
+    identity.extend(single(brain::config_path(), "config.toml"));
+    out.push(Section { key: "identity".into(), label: "Identity".into(), entries: identity });
+
+    // Newest first: a log is read from the end.
+    let mut daily = files_in(&root, &brain::daily_dir(), &["md"]);
+    daily.reverse();
+    out.push(Section { key: "daily".into(), label: "Daily".into(), entries: daily });
+
+    out.push(Section {
+        key: "knowledge".into(),
+        label: "Knowledge".into(),
+        entries: files_in(&root, &brain::knowledge_dir(), &["md"]),
+    });
+    out.push(Section {
+        key: "skills".into(),
+        label: "Skills".into(),
+        entries: files_in(&root, &brain::skills_dir(), &["md"]),
+    });
+    out.push(Section {
+        key: "inbox".into(),
+        label: "Inbox".into(),
+        entries: files_in(&root, &brain::inbox_dir(), &[]),
+    });
+    out.push(Section {
+        key: "archive".into(),
+        label: "Archive".into(),
+        entries: files_in(&root, &brain::takeout_dir(), &[]),
+    });
+
+    out
+}
+
+/// Files in one directory, titled by their heading when they have one.
+fn files_in(root: &std::path::Path, dir: &std::path::Path, extensions: &[&str]) -> Vec<Entry> {
+    let Ok(entries) = std::fs::read_dir(dir) else { return Vec::new() };
+    let mut out: Vec<Entry> = entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.is_file())
+        .filter(|p| {
+            extensions.is_empty()
+                || p.extension().is_some_and(|e| extensions.contains(&e.to_string_lossy().as_ref()))
+        })
+        .map(|path| {
+            let stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+            let title = std::fs::read_to_string(&path)
+                .ok()
+                .and_then(|t| {
+                    t.lines()
+                        .find(|l| l.starts_with("# "))
+                        .map(|l| l.trim_start_matches("# ").trim().to_string())
+                })
+                .filter(|t| !t.is_empty())
+                .unwrap_or(stem);
+            Entry { path: rel(root, &path), title, meta: modified(&path) }
+        })
+        .collect();
+    out.sort_by(|a, b| a.path.cmp(&b.path));
+    out
+}
+
+fn rel(root: &std::path::Path, path: &std::path::Path) -> String {
+    path.strip_prefix(root).unwrap_or(path).to_string_lossy().to_string()
+}
+
+fn modified(path: &std::path::Path) -> String {
+    let Ok(meta) = std::fs::metadata(path) else { return String::new() };
+    let Ok(time) = meta.modified() else { return String::new() };
+    let stamp: chrono::DateTime<chrono::Local> = time.into();
+    stamp.format("%Y-%m-%d %H:%M").to_string()
+}

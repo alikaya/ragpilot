@@ -277,9 +277,11 @@ single index for good.
 ragpilot dashboard --open
 ```
 
-A window onto this machine: every registered project with its layout, index
-freshness and collection size, and the brain beside it — rules, open threads,
-compiled notes. Read a note in place, close a finished thread, start a compile.
+Two views. **Projects**: every registered project with its layout, index
+freshness, chunk and point counts. **Brain**: the whole vault, browsable —
+persona, rules, open threads, daily logs, knowledge notes, skills, inbox,
+archive — with semantic search across all of it. Read any file in place, close
+a finished thread, start a compile.
 
 It binds to the loopback interface only and is gated by a token minted at
 startup (printed with the URL), because the page can act and a page in your
