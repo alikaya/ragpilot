@@ -175,7 +175,10 @@ async fn summarise(
     engine_override: Option<&str>,
     input: &str,
 ) -> Result<Digest> {
-    let engine = engine::create(cfg, engine_override).map_err(|e| anyhow::anyhow!("{e}"))?;
+    // A session summary is the easy half of the job, so it can run on a cheaper
+    // model than the nightly compile when the user asks for that.
+    let engine = engine::create_with_model(cfg, engine_override, cfg.flush_model())
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
     engine
         .available()
         .map_err(|e| anyhow::anyhow!("compiler engine '{}' unavailable: {e}", engine.name()))?;

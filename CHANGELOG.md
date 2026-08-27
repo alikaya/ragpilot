@@ -7,6 +7,12 @@ All notable changes to **ragpilot** are documented here. The format is based on
 ## [Unreleased]
 
 ### Fixed
+- **`flush.model_override` did nothing.** The setting shipped in the config
+  template, was documented as "empty = use compiler.model", and had a test — but
+  nothing read it, so session summaries always ran on `compiler.model`. Now
+  wired: set `compiler.model = "sonnet"` for the nightly compile and
+  `flush.model_override = "haiku"` for the per-session summary, which is the far
+  easier job.
 - **The compiler can no longer invent a wikilink.** It was handed the index of
   existing notes and still linked to slugs that were not in it, leaving dangling
   links for the user to clean up. Links are now filtered at write time against

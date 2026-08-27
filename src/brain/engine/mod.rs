@@ -60,10 +60,27 @@ pub fn create(
     config: &super::config::BrainConfig,
     override_name: Option<&str>,
 ) -> Result<Box<dyn CompilerEngine>, EngineError> {
+    create_with_model(config, override_name, None)
+}
+
+/// Like [`create`], with the engine's model replaced.
+///
+/// Session flushes use this to honour `flush.model_override`: the same engine,
+/// a cheaper model, because summarising one session is a far easier job than
+/// compiling a week of them.
+pub fn create_with_model(
+    config: &super::config::BrainConfig,
+    override_name: Option<&str>,
+    model: Option<&str>,
+) -> Result<Box<dyn CompilerEngine>, EngineError> {
     let name = override_name.unwrap_or(&config.compiler.engine);
     match name {
-        "claude-cli" => Ok(Box::new(claude_cli::ClaudeCliEngine::new(&config.compiler.model))),
-        "gemini-api" => Ok(Box::new(gemini::GeminiApiEngine::new(&config.compiler.gemini.model))),
+        "claude-cli" => Ok(Box::new(claude_cli::ClaudeCliEngine::new(
+            model.unwrap_or(&config.compiler.model),
+        ))),
+        "gemini-api" => Ok(Box::new(gemini::GeminiApiEngine::new(
+            model.unwrap_or(&config.compiler.gemini.model),
+        ))),
         other => Err(EngineError::Unavailable(format!(
             "Unknown compiler engine '{other}'. Known engines: claude-cli, gemini-api."
         ))),
@@ -227,5 +244,34 @@ mod tests {
         for name in ENGINE_NAMES {
             assert!(err.contains(name), "help text should list {name}");
         }
+    }
+}
+
+#[cfg(test)]
+mod model_override_tests {
+    use super::*;
+    use crate::brain::config::BrainConfig;
+
+    #[test]
+    fn the_flush_override_changes_the_model_not_the_engine() {
+        let mut cfg = BrainConfig::default();
+        cfg.compiler.model = "sonnet".into();
+        cfg.flush.model_override = "haiku".into();
+
+        // The compile path keeps the configured model…
+        let compile = create(&cfg, None).unwrap();
+        assert_eq!(compile.name(), "claude-cli");
+
+        // …and the flush path takes the override, on the same engine.
+        let flush = create_with_model(&cfg, None, cfg.flush_model()).unwrap();
+        assert_eq!(flush.name(), "claude-cli");
+
+        // An unset override leaves the model alone.
+        cfg.flush.model_override = String::new();
+        assert_eq!(cfg.flush_model(), None);
+
+        // The override applies to whichever engine is selected.
+        let gemini = create_with_model(&cfg, Some("gemini-api"), Some("gemini-2.5-pro")).unwrap();
+        assert_eq!(gemini.name(), "gemini-api");
     }
 }

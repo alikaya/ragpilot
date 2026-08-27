@@ -103,13 +103,16 @@ impl BrainConfig {
             .with_context(|| format!("Cannot parse brain config: {}", path.display()))
     }
 
-    /// The model this engine should use — `flush.model_override` wins when set.
-    pub fn flush_model(&self) -> &str {
-        if self.flush.model_override.is_empty() {
-            &self.compiler.model
-        } else {
-            &self.flush.model_override
-        }
+    /// The model session flushes should use instead of the compiler's, if the
+    /// user set one.
+    ///
+    /// Session summaries run after every session and are an easy task; the
+    /// nightly compile runs once and is a hard one. Splitting them is the point
+    /// of this setting — `compiler.model = "sonnet"` with
+    /// `flush.model_override = "haiku"` is the usual shape.
+    pub fn flush_model(&self) -> Option<&str> {
+        let override_ = self.flush.model_override.trim();
+        (!override_.is_empty()).then_some(override_)
     }
 
     /// The starting config file. Written once; the user owns it afterwards, so
@@ -168,8 +171,14 @@ mod tests {
     #[test]
     fn flush_model_override_wins_when_set() {
         let mut cfg = BrainConfig::default();
-        assert_eq!(cfg.flush_model(), "haiku");
+        // Unset means "use the compiler's model", not a second copy of it.
+        assert_eq!(cfg.flush_model(), None);
+
         cfg.flush.model_override = "sonnet".into();
-        assert_eq!(cfg.flush_model(), "sonnet");
+        assert_eq!(cfg.flush_model(), Some("sonnet"));
+
+        // Whitespace is not a setting.
+        cfg.flush.model_override = "   ".into();
+        assert_eq!(cfg.flush_model(), None);
     }
 }
