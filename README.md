@@ -161,7 +161,9 @@ Add to `.claude/settings.json`:
 | `ragpilot status` | Show index statistics |
 | `ragpilot clean [--yes]` | Delete the Qdrant collection |
 | `ragpilot hooks` | Install git `post-commit` / `post-merge` hooks |
-| `ragpilot migrate [--keep]` | Move a legacy `.rag/` project into the global data directory |
+| `ragpilot migrate [--keep]` | Move this project's legacy `.rag/` into the global data directory |
+| `ragpilot migrate --scan <dir>` | Inventory every legacy project under a directory (read-only) |
+| `ragpilot migrate --all <dir>` | Migrate all of them |
 | `ragpilot projects list\|rm\|relink` | Manage registered projects |
 | `ragpilot brain <subcommand>` | The second brain — see [docs/brain.md](docs/brain.md) |
 | `ragpilot doctor` | Check installation and configuration |
@@ -234,6 +236,13 @@ Projects created before 0.6.0 keep working, with a one-line reminder on each
 command. When you are ready:
 
 ```bash
+ragpilot migrate --scan ~/Projects   # inventory: what is still on the old layout
+ragpilot migrate --all  ~/Projects   # migrate all of them
+```
+
+Or one project at a time:
+
+```bash
 cd /path/to/project
 ragpilot migrate            # --keep leaves .rag/ in place as a fallback
 ```
@@ -242,6 +251,12 @@ Migration **does not re-index**. The existing Qdrant collection is aliased to
 the new name, so it costs no embedding calls and search results are identical
 either side of it. Configuration and state are moved, the project is registered,
 and `.rag/` is removed only after you confirm.
+
+`--scan` is read-only — run it first to see what you have. It also flags a real
+hazard: the old scheme named collections after the *folder*, so two projects
+with the same folder name in different places shared one index. Bulk migration
+skips those and tells you which; migrating both would have left them sharing a
+single index for good.
 
 ---
 

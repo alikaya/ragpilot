@@ -5,7 +5,8 @@
 //! project is registered, and the existing Qdrant index is *aliased* to its new
 //! name rather than rebuilt — migrating is a rename, not a re-embed.
 
-use std::path::Path;
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use colored::Colorize;
@@ -20,6 +21,13 @@ const MOVABLE: &[&str] = &["config.toml", "state.json", "stores.db", "queries"];
 
 pub async fn cmd_migrate(keep: bool, yes: bool) -> Result<()> {
     let root = paths::canonical(&std::env::current_dir()?)?;
+    migrate_one(&root, keep, yes).await
+}
+
+/// Migrate one project. `yes` skips the `.rag/` deletion prompt — bulk runs
+/// answer it once, up front, rather than per project.
+async fn migrate_one(root: &Path, keep: bool, yes: bool) -> Result<()> {
+    let root = root.to_path_buf();
     let legacy = ProjectPaths::legacy(&root);
 
     if !legacy.config().exists() {
@@ -136,6 +144,19 @@ async fn alias_existing_index(target: &ProjectPaths, id: &str) -> Result<Option<
         return Ok(Some(format!("Collection '{id}' already exists — left as it is.")));
     }
 
+    // Under the old scheme the collection was named after the *folder*, so two
+    // projects with the same folder name in different places shared one. If
+    // another project already claimed this index, aliasing onto it would make
+    // them silently share a single index from now on.
+    let claimed = store.aliases_of(&default_pin).await;
+    if let Some(other) = claimed.iter().find(|a| a.as_str() != id) {
+        return Ok(Some(format!(
+            "Collection '{default_pin}' is already claimed by '{other}' — two projects share \
+             this legacy index. Left alone; run `ragpilot init --force` here to build '{id}' \
+             from scratch."
+        )));
+    }
+
     store.create_alias_for(&default_pin, id).await?;
     Ok(Some(format!(
         "Index kept: '{default_pin}' is now reachable as '{id}' (alias, no re-index)"
@@ -169,6 +190,204 @@ fn remove_legacy_dir(legacy: &ProjectPaths, keep: bool, yes: bool) -> Result<()>
     std::fs::remove_dir_all(dir)
         .with_context(|| format!("Cannot remove {}", dir.display()))?;
     println!("{} Removed {}", "✓".green(), dir.display());
+    Ok(())
+}
+
+// ── scan / bulk migrate ────────────────────────────────────────────────────
+
+/// Directories never worth descending into while hunting for legacy projects.
+const SKIP_DIRS: &[&str] = &[
+    ".git", "node_modules", "target", "vendor", ".venv", "venv", "dist", "build",
+    ".cache", ".next", ".nuxt", "__pycache__",
+];
+
+/// A legacy project found by the scanner.
+pub struct Legacy {
+    pub root: PathBuf,
+    pub project_name: String,
+    /// The collection its config points at under the old naming scheme.
+    pub collection: String,
+    pub id: String,
+    pub registered: bool,
+    pub size_kb: u64,
+}
+
+/// Walk `root` for `.rag/config.toml`. Nested projects are legitimate — a
+/// monorepo can index a subdirectory separately — so the walk does not stop at
+/// the first hit.
+pub fn scan(root: &Path, registry: &Registry) -> Vec<Legacy> {
+    let mut found = Vec::new();
+    let mut stack = vec![root.to_path_buf()];
+
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name == ".rag" {
+                if let Some(legacy) = describe(&dir, registry) {
+                    found.push(legacy);
+                }
+                continue;
+            }
+            if SKIP_DIRS.contains(&name.as_str()) {
+                continue;
+            }
+            stack.push(path);
+        }
+    }
+    found.sort_by(|a, b| a.root.cmp(&b.root));
+    found
+}
+
+fn describe(project_root: &Path, registry: &Registry) -> Option<Legacy> {
+    let legacy = ProjectPaths::legacy(project_root);
+    if !legacy.config().exists() {
+        return None;
+    }
+    let root = paths::canonical(project_root).ok()?;
+    let config = Config::load(&legacy.config()).ok()?;
+    let target = ProjectPaths::global(&root);
+
+    Some(Legacy {
+        project_name: config.project.name.clone(),
+        collection: legacy.collection(config.qdrant.collection.as_deref(), &config.project.name),
+        id: target.id().unwrap_or_default().to_string(),
+        registered: registry.lookup(&root).is_some(),
+        size_kb: dir_size(legacy.data_dir()) / 1024,
+        root,
+    })
+}
+
+fn dir_size(dir: &Path) -> u64 {
+    let Ok(entries) = std::fs::read_dir(dir) else { return 0 };
+    entries
+        .flatten()
+        .map(|e| match e.metadata() {
+            Ok(m) if m.is_dir() => dir_size(&e.path()),
+            Ok(m) => m.len(),
+            Err(_) => 0,
+        })
+        .sum()
+}
+
+/// Legacy collection names claimed by more than one project. Under the old
+/// scheme the name came from the folder, so `~/dev/api` and `~/tmp/api` are one
+/// collection — migrating both would leave them sharing a single index.
+fn collisions(found: &[Legacy]) -> BTreeMap<String, Vec<PathBuf>> {
+    let mut by_collection: BTreeMap<String, Vec<PathBuf>> = BTreeMap::new();
+    for legacy in found {
+        by_collection
+            .entry(legacy.collection.clone())
+            .or_default()
+            .push(legacy.root.clone());
+    }
+    by_collection.retain(|_, roots| roots.len() > 1);
+    by_collection
+}
+
+pub async fn cmd_scan(root: &Path, migrate_all: bool, keep: bool, yes: bool) -> Result<()> {
+    let root = paths::canonical(root)
+        .with_context(|| format!("Cannot resolve {}", root.display()))?;
+    let registry = Registry::load()?;
+
+    println!("{} Scanning {} for legacy .rag/ projects…", "→".cyan(), root.display());
+    let found = scan(&root, &registry);
+    if found.is_empty() {
+        println!("{} None found — nothing to migrate.", "✓".green());
+        return Ok(());
+    }
+
+    let clashing = collisions(&found);
+    let pending: Vec<&Legacy> = found.iter().filter(|l| !l.registered).collect();
+    let total_kb: u64 = pending.iter().map(|l| l.size_kb).sum();
+
+    println!("\n{}", "─── Legacy projects ─────────────────────────────".bold());
+    for legacy in &found {
+        let status = if legacy.registered {
+            "already migrated".green()
+        } else if clashing.contains_key(&legacy.collection) {
+            "SHARED COLLECTION".yellow()
+        } else {
+            "to migrate".normal()
+        };
+        println!("  {} — {}", legacy.root.display(), status);
+        println!(
+            "      '{}': collection '{}' → '{}'  ({} KB)",
+            legacy.project_name, legacy.collection, legacy.id, legacy.size_kb
+        );
+    }
+
+    if !clashing.is_empty() {
+        println!("\n{}", "─── Shared collections ──────────────────────────".bold());
+        for line in [
+            "The old naming scheme took the collection name from the folder, so these",
+            "projects share one index. Migrating them together would leave them sharing",
+            "it for good, so bulk migration skips them — migrate the one you want to",
+            "keep the index for, then `ragpilot init --force` in the others.",
+        ] {
+            println!("  {line}");
+        }
+        for (collection, roots) in &clashing {
+            println!("  {}:", collection.yellow());
+            for r in roots {
+                println!("      {}", r.display());
+            }
+        }
+    }
+
+    println!(
+        "\n  {} project(s) found · {} to migrate · {} KB of project-local data",
+        found.len(),
+        pending.len(),
+        total_kb
+    );
+
+    if !migrate_all {
+        println!("\n  Migrate them with: {}", format!("ragpilot migrate --all {}", root.display()).bold());
+        println!("  Or one at a time:  {}", "cd <project> && ragpilot migrate".bold());
+        return Ok(());
+    }
+
+    let safe: Vec<&Legacy> = pending
+        .iter()
+        .copied()
+        .filter(|l| !clashing.contains_key(&l.collection))
+        .collect();
+    if safe.is_empty() {
+        println!("\n{} Nothing to migrate automatically.", "i".blue());
+        return Ok(());
+    }
+    if !yes && !confirm(&format!("Migrate {} project(s)?", safe.len()))? {
+        println!("Aborted.");
+        return Ok(());
+    }
+
+    let mut ok = 0usize;
+    let mut failed = Vec::new();
+    for legacy in &safe {
+        println!("\n{} {}", "→".cyan(), legacy.root.display());
+        match migrate_one(&legacy.root, keep, true).await {
+            Ok(()) => ok += 1,
+            Err(e) => {
+                println!("  {} {e}", "✗".red());
+                failed.push(legacy.root.display().to_string());
+            }
+        }
+    }
+
+    println!("\n{}", "─── Result ──────────────────────────────────────".bold());
+    println!("  migrated: {ok}/{}", safe.len());
+    if !clashing.is_empty() {
+        println!("  skipped (shared collection): {}", clashing.values().map(|v| v.len()).sum::<usize>());
+    }
+    if !failed.is_empty() {
+        println!("  {} {}", "failed:".red(), failed.join(", "));
+    }
+    println!("  Verify with: {}", "ragpilot projects list".bold());
     Ok(())
 }
 
@@ -362,7 +581,6 @@ fn confirm(question: &str) -> Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     fn scratch(label: &str) -> PathBuf {
@@ -376,6 +594,98 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    fn legacy_at(root: &Path, name: &str, collection: &str) {
+        let rag = root.join(".rag");
+        std::fs::create_dir_all(&rag).unwrap();
+        std::fs::write(
+            rag.join("config.toml"),
+            format!(
+                "[project]\nname = \"{name}\"\n\n[embedding]\nprovider = \"local\"\n\n\
+                 [qdrant]\nurl = \"http://localhost:6334\"\ncollection = \"{collection}\"\n\n\
+                 [indexing]\nchunk_size = 700\nchunk_overlap = 80\ninclude_extensions = [\"rs\"]\n\
+                 include_dirs = []\n\n[mcp]\ncontext_chunks = 4\n"
+            ),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn scan_finds_nested_projects_and_skips_build_directories() {
+        let dir = scratch("scan");
+        let tree = dir.join("tree");
+        for rel in ["app", "app/packages/api", "node_modules/dep", "target/debug/copy"] {
+            std::fs::create_dir_all(tree.join(rel)).unwrap();
+            legacy_at(&tree.join(rel), &rel.replace('/', "-"), "coll");
+        }
+
+        let registry = Registry::load_from(&dir.join("registry.json")).unwrap();
+        let found = scan(&tree, &registry);
+
+        let names: Vec<String> = found
+            .iter()
+            .map(|l| l.root.strip_prefix(&tree).unwrap().to_string_lossy().to_string())
+            .collect();
+        // A monorepo can index a subdirectory separately, so nesting is kept…
+        assert!(names.contains(&"app".to_string()));
+        assert!(names.contains(&"app/packages/api".to_string()));
+        // …but build output and vendored code are never projects.
+        assert!(!names.iter().any(|n| n.contains("node_modules")), "{names:?}");
+        assert!(!names.iter().any(|n| n.contains("target")), "{names:?}");
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn scan_reports_the_id_and_marks_already_migrated_projects() {
+        let dir = scratch("registered");
+        let tree = dir.join("tree");
+        let (a, b) = (tree.join("alpha"), tree.join("beta"));
+        std::fs::create_dir_all(&a).unwrap();
+        std::fs::create_dir_all(&b).unwrap();
+        legacy_at(&a, "alpha", "alpha");
+        legacy_at(&b, "beta", "beta");
+
+        let mut registry = Registry::load_from(&dir.join("registry.json")).unwrap();
+        registry.upsert(&paths::canonical(&a).unwrap());
+
+        let found = scan(&tree, &registry);
+        assert_eq!(found.len(), 2);
+        let alpha = found.iter().find(|l| l.project_name == "alpha").unwrap();
+        let beta = found.iter().find(|l| l.project_name == "beta").unwrap();
+
+        assert!(alpha.registered, "a registered project should be reported as migrated");
+        assert!(!beta.registered);
+        assert!(beta.id.starts_with("beta-"), "{}", beta.id);
+        assert_eq!(beta.collection, "beta");
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn collisions_catch_two_projects_sharing_one_legacy_collection() {
+        let mk = |root: &str, collection: &str| Legacy {
+            root: PathBuf::from(root),
+            project_name: "x".into(),
+            collection: collection.into(),
+            id: "x-1".into(),
+            registered: false,
+            size_kb: 0,
+        };
+        let found = vec![
+            mk("/dev/api", "api"),
+            mk("/tmp/api", "api"),
+            mk("/dev/web", "web"),
+        ];
+
+        let clashing = collisions(&found);
+        assert_eq!(clashing.len(), 1, "only the shared name is a collision");
+        assert_eq!(clashing["api"].len(), 2);
+        assert!(!clashing.contains_key("web"));
+
+        // Nothing shared → nothing flagged.
+        assert!(collisions(&[mk("/dev/a", "a"), mk("/dev/b", "b")]).is_empty());
     }
 
     #[test]

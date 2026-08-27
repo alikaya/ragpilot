@@ -6,7 +6,21 @@ All notable changes to **ragpilot** are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- **`ragpilot migrate --scan <dir>`** — a read-only inventory of every legacy
+  `.rag/` project under a directory: where it is, what collection it uses, the
+  id it will get, how much project-local data it holds, and whether it has been
+  migrated already. Upgrading used to mean remembering where every project was
+  and visiting each one.
+- **`ragpilot migrate --all <dir>`** — migrates them in one pass.
+
 ### Fixed
+- **Two projects can no longer end up sharing one index.** The old scheme named
+  a collection after the *folder*, so `~/dev/api` and `~/tmp/api` were one
+  collection. Migrating the second aliased it onto the first's index, and from
+  then on both projects searched the same one. Migration now refuses to alias a
+  collection another project has already claimed, and bulk migration skips such
+  projects and names them.
 - **`brain compile` no longer loses the material behind a skipped chunk.** A
   chunk whose model output failed to parse was reported as skipped, but its
   source files were still recorded as compiled — so that day's log was never

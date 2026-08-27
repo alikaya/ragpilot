@@ -82,7 +82,14 @@ async fn dispatch(observer: Option<Arc<dyn ToolObserver>>) -> anyhow::Result<()>
         Some("migrate") => {
             let keep = args.iter().any(|a| a == "--keep");
             let yes = args.iter().any(|a| a == "--yes" || a == "-y");
-            migrate::cmd_migrate(keep, yes).await
+            // `--scan <dir>` takes an inventory; `--all <dir>` migrates it.
+            let scan = flag_value(&args, "--scan");
+            let all = flag_value(&args, "--all");
+            match (scan, all) {
+                (_, Some(dir)) => migrate::cmd_scan(std::path::Path::new(&dir), true, keep, yes).await,
+                (Some(dir), None) => migrate::cmd_scan(std::path::Path::new(&dir), false, keep, yes).await,
+                (None, None) => migrate::cmd_migrate(keep, yes).await,
+            }
         }
         Some("projects") => migrate::cmd_projects(&args).await,
 
@@ -154,7 +161,9 @@ async fn dispatch(observer: Option<Arc<dyn ToolObserver>>) -> anyhow::Result<()>
                                                      agents: claude codex cursor vscode opencode windsurf antigravity all\n\
                    ragpilot init [--force]            Index current project\n\
                    ragpilot setup <folder> <agent>    Alias for 'ragpilot init <folder> <agent>'\n\
-                   ragpilot migrate [--keep] [-y]  Move .rag/ into the global data dir\n\
+                   ragpilot migrate [--keep] [-y]  Move this project's .rag/ into the global data dir\n\
+                   ragpilot migrate --scan <dir>   Find every legacy .rag/ project under <dir>\n\
+                   ragpilot migrate --all <dir>    Migrate all of them\n\
                    ragpilot projects list          List registered projects\n\
                    ragpilot projects rm <id>       Unregister + delete its data and collection\n\
                    ragpilot projects relink <id> <path>  Point a project at its new folder\n\

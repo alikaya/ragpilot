@@ -72,6 +72,21 @@ impl QdrantStore {
             .map(|a| a.collection_name)
     }
 
+    /// Aliases that already point at `collection`.
+    ///
+    /// Two legacy projects with the same folder name share one collection under
+    /// the old naming scheme, so this is how a second migration finds out the
+    /// index is already claimed instead of aliasing itself onto it.
+    pub(crate) async fn aliases_of(&self, collection: &str) -> Vec<String> {
+        let Ok(aliases) = self.client.list_aliases().await else { return Vec::new() };
+        aliases
+            .aliases
+            .into_iter()
+            .filter(|a| a.collection_name == collection)
+            .map(|a| a.alias_name)
+            .collect()
+    }
+
     pub(crate) async fn drop_alias(&self, alias: &str) -> Result<()> {
         self.client
             .delete_alias(alias.to_string())
