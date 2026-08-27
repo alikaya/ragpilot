@@ -22,10 +22,13 @@
 // the allow only silences "not called from `src/` yet".
 #![allow(dead_code)]
 
+pub mod compile;
 pub mod config;
+pub mod doctor;
 pub mod engine;
 pub mod hooks;
 pub mod runtime;
+pub mod schedule;
 pub mod session;
 pub mod vault;
 
@@ -48,6 +51,8 @@ state.json
 stores.db
 index.lock
 .sessions.json
+.compile.json
+.staging/
 *.tmp
 ";
 
@@ -305,7 +310,7 @@ url = "http://localhost:6334"
 chunk_size = 700
 chunk_overlap = 80
 include_extensions = ["md"]
-exclude_dirs = [".git", "archive"]
+exclude_dirs = [".git", "archive", ".staging"]
 include_dirs = []
 
 [mcp]

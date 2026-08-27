@@ -107,8 +107,17 @@ async fn dispatch(observer: Option<Arc<dyn ToolObserver>>) -> anyhow::Result<()>
                     let root = std::env::current_dir()?;
                     brain::hooks::install_claude(&root)
                 }
+                Some("compile") => {
+                    let light = args.iter().any(|a| a == "--light");
+                    brain::compile::cmd_compile(light, engine.as_deref()).await
+                }
+                Some("schedule") => brain::schedule::cmd_schedule(&args),
+                Some("doctor") => {
+                    let fix = args.iter().any(|a| a == "--fix");
+                    brain::doctor::cmd_doctor(fix).await
+                }
                 other => anyhow::bail!(
-                    "Unknown brain subcommand {:?}. Usage: ragpilot brain [init | index | hooks | session-start | session-end] [--engine <name>]\n  Engines: {}",
+                    "Unknown brain subcommand {:?}. Usage: ragpilot brain [init | index | compile | doctor | schedule | hooks | session-start | session-end] [--engine <name>] [--light] [--fix]\n  Engines: {}",
                     other.unwrap_or("(none)"),
                     brain::engine::ENGINE_NAMES.join(", ")
                 ),
@@ -135,6 +144,9 @@ async fn dispatch(observer: Option<Arc<dyn ToolObserver>>) -> anyhow::Result<()>
                    ragpilot projects relink <id> <path>  Point a project at its new folder\n\
                    ragpilot brain init [--engine <name>]  Set up the second-brain vault\n\
                    ragpilot brain index            Re-index the brain vault\n\
+                   ragpilot brain compile [--light]  Distil daily logs into knowledge notes\n\
+                   ragpilot brain doctor [--fix]   Check the vault and repair what is safe\n\
+                   ragpilot brain schedule [--install|--remove|--print]  Daily compile\n\
                    ragpilot brain hooks            Install the Claude Code session hooks here\n\
                    ragpilot update                 Re-index changed files\n\
                    ragpilot status                 Show index statistics\n\
@@ -361,6 +373,15 @@ async fn cmd_doctor() -> anyhow::Result<()> {
         ),
         registered_in.is_some(),
     );
+
+    // 7. Brain — summarised here so one `doctor` covers the whole install.
+    if brain::exists() {
+        println!("\n{}", "─── Brain ───────────────────────────────────────".bold());
+        for finding in brain::doctor::checks(false).await {
+            check(&finding.label, finding.ok);
+        }
+        println!("  Full detail: {}", "ragpilot brain doctor".bold());
+    }
 
     println!("\n{}", "─── Quick Fix ──────────────────────────────────".bold());
     println!("  ragpilot init     Index the project");
