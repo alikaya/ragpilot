@@ -11,6 +11,9 @@ use crate::store::SearchFilters;
 use super::rag::format_result;
 use tiktoken_rs::CoreBPE;
 
+/// Ceiling on the brain slice of a bundle. Small on purpose.
+const BRAIN_BUNDLE_TOKENS: usize = 600;
+
 pub fn tool_definitions() -> Vec<serde_json::Value> {
     vec![json!({
         "name": "context_bundle",
@@ -19,7 +22,8 @@ pub fn tool_definitions() -> Vec<serde_json::Value> {
             "type": "object",
             "properties": {
                 "task":          { "type": "string", "description": "Task description for context retrieval" },
-                "budget_tokens": { "type": "integer", "description": "Max output tokens (default: from config)", "default": 6000 }
+                "budget_tokens": { "type": "integer", "description": "Max output tokens (default: from config)", "default": 6000 },
+                "include_brain": { "type": "boolean", "description": "Prepend a small, fixed-size persona + recent-decisions summary from the second brain", "default": false }
             },
             "required": ["task"]
         }
@@ -112,6 +116,22 @@ pub async fn bundle(req: &McpRequest, args: &serde_json::Value, ctx: &McpContext
             };
             used_tokens += approx_tokens(&summary);
             output.insert("impact_summary".into(), json!(summary));
+        }
+    }
+
+    // ── 3b. Brain (opt-in) ────────────────────────────────────────────────────
+    // A small, fixed slice — who the agent is and what was recently decided.
+    // Deliberately capped rather than budget-proportional: project context is
+    // what a bundle is for, and the brain must never crowd it out.
+    if args.get("include_brain").and_then(|v| v.as_bool()).unwrap_or(false) {
+        match crate::brain::vault::load_package(BRAIN_BUNDLE_TOKENS) {
+            Ok(text) => {
+                used_tokens += approx_tokens(&text);
+                output.insert("brain".into(), json!(text));
+            }
+            Err(e) => {
+                output.insert("brain".into(), json!(format!("brain unavailable: {e}")));
+            }
         }
     }
 

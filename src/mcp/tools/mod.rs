@@ -9,6 +9,7 @@ use crate::store::symbol_graph::SymbolGraphStore;
 use crate::store::VectorStore;
 use super::protocol::{McpRequest, McpResponse};
 
+pub mod brain;
 pub mod rag;
 pub mod nav;
 pub mod impact;
@@ -103,10 +104,7 @@ pub async fn handle_request(req: &McpRequest, ctx: Option<&Arc<McpContext>>) -> 
         // answer cleanly — this is what prevents the client-visible "EOF".
         "initialize"  => handle_initialize(req),
         "tools/list"  => handle_tools_list(req, ctx.map(|c| &**c)),
-        "tools/call"  => match ctx {
-            Some(c) => handle_tools_call(req, c).await,
-            None    => McpResponse::tool_error(req.id.clone(), no_project_message()),
-        },
+        "tools/call"  => handle_tools_call(req, ctx).await,
         other => McpResponse::error(-32601, &format!("Method not found: {other}"), req.id.clone()),
     }
 }
@@ -141,10 +139,12 @@ fn handle_tools_list(req: &McpRequest, ctx: Option<&McpContext>) -> McpResponse 
     tools.extend(context::tool_definitions());
     tools.extend(index::tool_definitions());
     tools.extend(review::tool_definitions());
+    // Brain tools are always listed: they need no project.
+    tools.extend(brain::tool_definitions());
     McpResponse::ok(req.id.clone(), serde_json::json!({ "tools": tools }))
 }
 
-async fn handle_tools_call(req: &McpRequest, ctx: &Arc<McpContext>) -> McpResponse {
+async fn handle_tools_call(req: &McpRequest, ctx: Option<&Arc<McpContext>>) -> McpResponse {
     let params = match req.params.as_ref() {
         Some(p) => p,
         None    => return McpResponse::error(-32602, "Missing params", req.id.clone()),
@@ -160,6 +160,17 @@ async fn handle_tools_call(req: &McpRequest, ctx: &Arc<McpContext>) -> McpRespon
     // dots. Normalize any legacy dotted name to its underscore form so older
     // configs keep working.
     let normalized = name.replace('.', "_");
+
+    // The brain belongs to the machine, not to a project, so its tools answer
+    // in an unregistered folder too — that is the whole point of having one.
+    if brain::TOOL_NAMES.contains(&normalized.as_str()) {
+        return brain::handle(&normalized, req, args).await;
+    }
+
+    let ctx = match ctx {
+        Some(c) => c,
+        None => return McpResponse::tool_error(req.id.clone(), no_project_message()),
+    };
 
     match normalized.as_str() {
         // RAG tools

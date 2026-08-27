@@ -18,6 +18,12 @@ pub fn tool_definitions(search_desc: &str) -> Vec<serde_json::Value> {
                 "properties": {
                     "query": { "type": "string" },
                     "k":     { "type": "integer", "description": "Results count (default 6)", "default": 6 },
+                    "scope": {
+                        "type": "string",
+                        "description": "Where to search: project (default, the codebase), brain (the second brain), or both. With brain or both the result is an object keyed by scope.",
+                        "enum": ["project", "brain", "both"],
+                        "default": "project"
+                    },
                     "filters": {
                         "type": "object",
                         "properties": {
@@ -141,6 +147,26 @@ pub async fn search(req: &McpRequest, args: &serde_json::Value, ctx: &McpContext
         .and_then(|v| v.as_str())
         .map(|s| if s.len() <= 5 && !s.contains(' ') { file_language(s).to_string() } else { s.to_string() });
 
+    let scope = args.get("scope").and_then(|v| v.as_str()).unwrap_or("project");
+    if !matches!(scope, "project" | "brain" | "both") {
+        return McpResponse::tool_error(
+            req.id.clone(),
+            format!("Unknown scope '{scope}'. Use one of: project, brain, both"),
+        );
+    }
+
+    // Brain-only: no project index is touched, so this answers even when the
+    // project index is empty or stale.
+    if scope == "brain" {
+        return match brain_results(&query, limit).await {
+            Ok(items) => McpResponse::tool_text(
+                req.id.clone(),
+                serde_json::to_string_pretty(&json!({ "brain": items })).unwrap_or_default(),
+            ),
+            Err(e) => McpResponse::tool_error(req.id.clone(), e),
+        };
+    }
+
     let embeddings = match ctx.embedder.embed(&[query.clone()]).await {
         Ok(e)  => e,
         Err(e) => return McpResponse::tool_error(req.id.clone(), format!("Embedding error: {e}")),
@@ -155,12 +181,22 @@ pub async fn search(req: &McpRequest, args: &serde_json::Value, ctx: &McpContext
         Err(e) => return McpResponse::tool_error(req.id.clone(), format!("Search error: {e}")),
     };
 
-    if results.is_empty() {
+    if results.is_empty() && scope == "project" {
         return McpResponse::tool_text(req.id.clone(),
             "No results found. Run 'ragpilot init' to index the project.".into());
     }
 
     let items: Vec<serde_json::Value> = results.iter().map(format_result).collect();
+
+    // `both` keeps the two sets apart rather than interleaving them: the scores
+    // come from different collections and are not comparable.
+    if scope == "both" {
+        let brain = brain_results(&query, limit).await.unwrap_or_else(|e| vec![json!({ "error": e })]);
+        let out = serde_json::to_string_pretty(&json!({ "project": items, "brain": brain }))
+            .unwrap_or_default();
+        return McpResponse::tool_text(req.id.clone(), out);
+    }
+
     let mut out = serde_json::to_string_pretty(&items).unwrap_or_default();
     if has_dirty_files(ctx) {
         out.push_str("\n\nIndex may be stale. Run rag_ensure_index or ragpilot update.");
@@ -322,4 +358,11 @@ fn has_dirty_files(ctx: &McpContext) -> bool {
             Err(_) => true,
         }
     })
+}
+
+/// Brain-side results for `scope: brain | both`, in the brain's own shape.
+async fn brain_results(query: &str, limit: u64) -> Result<Vec<serde_json::Value>, String> {
+    let rt = crate::brain::runtime::runtime().await.map_err(|e| e.to_string())?;
+    let hits = rt.search(query, limit, None).await.map_err(|e| e.to_string())?;
+    Ok(hits.iter().map(super::brain::format_hit).collect())
 }

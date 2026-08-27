@@ -24,6 +24,8 @@
 
 pub mod config;
 pub mod engine;
+pub mod runtime;
+pub mod vault;
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -284,7 +286,7 @@ fn now_date() -> String {
 
 /// The indexing config for the vault. It is a markdown tree, not a codebase:
 /// only `.md` is indexed, and the derived files are excluded.
-fn index_config() -> Result<crate::config::Config> {
+pub(crate) fn index_config() -> Result<crate::config::Config> {
     crate::config::Config::from_toml_str(&format!(
         r#"
 [project]
