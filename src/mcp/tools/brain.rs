@@ -188,7 +188,28 @@ fn snippet(content: &str, max_chars: usize) -> String {
 
 // ── brain_note ─────────────────────────────────────────────────────────────
 
+/// Refuse to write into a vault that was never set up. Without this a note
+/// lands in a directory with no config, no git and no persona — a half-made
+/// brain that `brain_search` then correctly reports as missing.
+fn require_brain(req: &McpRequest) -> Option<McpResponse> {
+    brain::exists().then_some(()).map_or_else(
+        || {
+            Some(McpResponse::tool_error(
+                req.id.clone(),
+                format!(
+                    "No brain at {} — run `ragpilot brain init` first.",
+                    brain::dir().display()
+                ),
+            ))
+        },
+        |_| None,
+    )
+}
+
 async fn note(req: &McpRequest, args: &serde_json::Value) -> McpResponse {
+    if let Some(refusal) = require_brain(req) {
+        return refusal;
+    }
     let text = match args.get("text").and_then(|v| v.as_str()) {
         Some(t) if !t.trim().is_empty() => t,
         _ => return McpResponse::tool_error(req.id.clone(), "Missing 'text'".into()),
@@ -210,6 +231,9 @@ async fn note(req: &McpRequest, args: &serde_json::Value) -> McpResponse {
 // ── brain_flush ────────────────────────────────────────────────────────────
 
 async fn flush(req: &McpRequest, args: &serde_json::Value) -> McpResponse {
+    if let Some(refusal) = require_brain(req) {
+        return refusal;
+    }
     let summary = match args.get("summary").and_then(|v| v.as_str()) {
         Some(s) if !s.trim().is_empty() => s,
         _ => return McpResponse::tool_error(req.id.clone(), "Missing 'summary'".into()),

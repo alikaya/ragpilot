@@ -13,8 +13,15 @@ All notable changes to **ragpilot** are documented here. The format is based on
   migrated already. Upgrading used to mean remembering where every project was
   and visiting each one.
 - **`ragpilot migrate --all <dir>`** — migrates them in one pass.
+- **`scripts/verify_migration.py`** — a read-only health check for a migrated
+  fleet: every project resolves, has its data, owns its collection alone, and
+  answers a search.
 
 ### Fixed
+- **`brain_note` and `brain_flush` no longer write into a brain that was never
+  set up.** They created `daily/` and appended to it in a directory with no
+  config, no git and no persona — a half-made vault that `brain_search` then
+  correctly reported as missing. Both now refuse, like the read tools do.
 - **Two projects can no longer end up sharing one index.** The old scheme named
   a collection after the *folder*, so `~/dev/api` and `~/tmp/api` were one
   collection. Migrating the second aliased it onto the first's index, and from

@@ -252,6 +252,17 @@ the new name, so it costs no embedding calls and search results are identical
 either side of it. Configuration and state are moved, the project is registered,
 and `.rag/` is removed only after you confirm.
 
+After migrating, check the result:
+
+```bash
+python3 scripts/verify_migration.py
+```
+
+It is read-only, and checks the things that would otherwise fail quietly: every
+registered project still exists and has its data files, resolves to a real
+collection, **owns that collection alone**, and actually answers a search. It
+also lists collections nothing claims any more.
+
 `--scan` is read-only — run it first to see what you have. It also flags a real
 hazard: the old scheme named collections after the *folder*, so two projects
 with the same folder name in different places shared one index. Bulk migration
