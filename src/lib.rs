@@ -95,8 +95,20 @@ async fn dispatch(observer: Option<Arc<dyn ToolObserver>>) -> anyhow::Result<()>
                     println!("Indexed {n} file(s) into '{}'.", paths::BRAIN_COLLECTION);
                     Ok(())
                 }
+                Some("session-start") => {
+                    let max = flag_value(&args, "--max-tokens").and_then(|v| v.parse().ok());
+                    brain::session::cmd_session_start(max)
+                }
+                Some("session-end") => {
+                    let transcript = flag_value(&args, "--transcript").map(std::path::PathBuf::from);
+                    brain::session::cmd_session_end(transcript, engine.as_deref()).await
+                }
+                Some("hooks") => {
+                    let root = std::env::current_dir()?;
+                    brain::hooks::install_claude(&root)
+                }
                 other => anyhow::bail!(
-                    "Unknown brain subcommand {:?}. Usage: ragpilot brain [init | index] [--engine <name>]\n  Engines: {}",
+                    "Unknown brain subcommand {:?}. Usage: ragpilot brain [init | index | hooks | session-start | session-end] [--engine <name>]\n  Engines: {}",
                     other.unwrap_or("(none)"),
                     brain::engine::ENGINE_NAMES.join(", ")
                 ),
@@ -123,6 +135,7 @@ async fn dispatch(observer: Option<Arc<dyn ToolObserver>>) -> anyhow::Result<()>
                    ragpilot projects relink <id> <path>  Point a project at its new folder\n\
                    ragpilot brain init [--engine <name>]  Set up the second-brain vault\n\
                    ragpilot brain index            Re-index the brain vault\n\
+                   ragpilot brain hooks            Install the Claude Code session hooks here\n\
                    ragpilot update                 Re-index changed files\n\
                    ragpilot status                 Show index statistics\n\
 \n\

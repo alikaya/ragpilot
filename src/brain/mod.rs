@@ -24,7 +24,9 @@
 
 pub mod config;
 pub mod engine;
+pub mod hooks;
 pub mod runtime;
+pub mod session;
 pub mod vault;
 
 use std::io::Write;
@@ -45,6 +47,7 @@ const GITIGNORE: &str = "\
 state.json
 stores.db
 index.lock
+.sessions.json
 *.tmp
 ";
 

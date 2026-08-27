@@ -74,7 +74,10 @@ pub fn configure(agent: &str, root: &Path) -> Result<()> {
 
 fn claude(root: &Path) -> Result<()> {
     write_json_mcp(&root.join(".mcp.json"), "mcpServers", server_entry(true), ".mcp.json", &[])?;
-    upsert_doc(&root.join("CLAUDE.md"), crate::CLAUDE_MD, "CLAUDE.md")
+    if crate::brain::exists() {
+        crate::brain::hooks::install_claude(root)?;
+    }
+    upsert_doc(&root.join("CLAUDE.md"), &with_brain_convention(crate::CLAUDE_MD), "CLAUDE.md")
 }
 
 fn opencode(root: &Path) -> Result<()> {
@@ -87,7 +90,7 @@ fn opencode(root: &Path) -> Result<()> {
     });
     let schema = ("$schema", json!("https://opencode.ai/config.json"));
     write_json_mcp(&root.join("opencode.json"), "mcp", entry, "opencode.json", &[schema])?;
-    upsert_doc(&root.join("AGENTS.md"), crate::AGENTS_MD, "AGENTS.md")
+    upsert_doc(&root.join("AGENTS.md"), &with_brain_convention(crate::AGENTS_MD), "AGENTS.md")
 }
 
 fn antigravity(root: &Path) -> Result<()> {
@@ -102,19 +105,19 @@ fn antigravity(root: &Path) -> Result<()> {
         Some("CLI (agy) + IDE 2.0 share this config. CLI-only path: ~/.gemini/antigravity-cli/mcp_config.json"),
         root,
     );
-    upsert_doc(&root.join("AGENTS.md"), crate::AGENTS_MD, "AGENTS.md")
+    upsert_doc(&root.join("AGENTS.md"), &with_brain_convention(crate::AGENTS_MD), "AGENTS.md")
 }
 
 fn cursor(root: &Path) -> Result<()> {
     write_json_mcp(&root.join(".cursor/mcp.json"), "mcpServers", server_entry(false), ".cursor/mcp.json", &[])?;
-    upsert_doc(&root.join("AGENTS.md"), crate::AGENTS_MD, "AGENTS.md")
+    upsert_doc(&root.join("AGENTS.md"), &with_brain_convention(crate::AGENTS_MD), "AGENTS.md")
 }
 
 fn vscode(root: &Path) -> Result<()> {
     // VS Code is the odd one out: root key is `servers` (NOT `mcpServers`) and
     // an explicit `"type": "stdio"` is expected.
     write_json_mcp(&root.join(".vscode/mcp.json"), "servers", server_entry(true), ".vscode/mcp.json", &[])?;
-    upsert_doc(&root.join("AGENTS.md"), crate::AGENTS_MD, "AGENTS.md")
+    upsert_doc(&root.join("AGENTS.md"), &with_brain_convention(crate::AGENTS_MD), "AGENTS.md")
 }
 
 fn codex(root: &Path) -> Result<()> {
@@ -159,7 +162,7 @@ fn codex(root: &Path) -> Result<()> {
         println!("{} .codex/config.toml", "✓".green());
     }
 
-    upsert_doc(&root.join("AGENTS.md"), crate::AGENTS_MD, "AGENTS.md")
+    upsert_doc(&root.join("AGENTS.md"), &with_brain_convention(crate::AGENTS_MD), "AGENTS.md")
 }
 
 // ─── JSON MCP config helpers ───────────────────────────────────────────────────
@@ -246,6 +249,18 @@ fn write_json_mcp(
         println!("{} {} (ragpilot added)", "✓".green(), display);
     }
     Ok(())
+}
+
+/// Append the brain convention to an agent doc when a brain exists.
+///
+/// Clients without lifecycle hooks can only be *asked* to call `brain_load` and
+/// `brain_flush`, so the ask goes in the same marked block as everything else —
+/// it appears and disappears with the brain, and never duplicates.
+fn with_brain_convention(base: &str) -> String {
+    if !crate::brain::exists() {
+        return base.to_string();
+    }
+    format!("{}\n\n{}", base.trim_end(), crate::brain::hooks::CONVENTION)
 }
 
 // ─── Agent markdown block ──────────────────────────────────────────────────────
