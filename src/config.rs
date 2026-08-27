@@ -281,6 +281,15 @@ impl Config {
             .with_context(|| format!("Cannot parse config: {}", path.display()))
     }
 
+    /// Load a config from TOML held in memory, still layered over the global
+    /// config and env. The brain builds its indexing config this way — it has
+    /// no project `config.toml` of its own, but must honour the machine's
+    /// Qdrant URL and embedding model like everything else.
+    pub fn from_toml_str(text: &str) -> Result<Self> {
+        let value: toml::Value = toml::from_str(text).context("Cannot parse config")?;
+        Self::from_layers(Self::load_global_layer()?, Some(value))
+    }
+
     /// Read `<data_root>/config.toml`, if it exists. A malformed global config
     /// is an error rather than a silent skip — otherwise a typo there would
     /// quietly change every project's behaviour.

@@ -82,8 +82,7 @@ impl Drop for IndexRunLock {
     }
 }
 
-pub fn try_acquire_index_lock(root: &Path) -> Result<IndexRunLock> {
-    let lock_path = crate::paths::ProjectPaths::resolve(root).lock();
+pub fn try_acquire_index_lock(lock_path: PathBuf) -> Result<IndexRunLock> {
     if let Some(parent) = lock_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -374,8 +373,9 @@ pub async fn index_project(
     store: &dyn VectorStore,
     force: bool,
 ) -> Result<IndexState> {
-    let _guard = try_acquire_index_lock(root)?;
-    let state_path = Config::state_path(root);
+    let paths = crate::paths::ProjectPaths::resolve(root);
+    let _guard = try_acquire_index_lock(paths.lock())?;
+    let state_path = paths.state();
     let mut state = if force { IndexState::default() } else { IndexState::load(&state_path)? };
 
     let scan = scan_files_with_report(root, &config.indexing)?;
@@ -593,20 +593,32 @@ pub(crate) fn build_store(
 }
 
 fn build_orchestrator(root: &PathBuf, config: &Config) -> Result<crate::orchestrator::IndexOrchestrator> {
+    build_orchestrator_at(&crate::paths::ProjectPaths::resolve(root), config)
+}
+
+/// Build an orchestrator for an already-resolved layout. The brain vault uses
+/// this to index itself into its own directory rather than a project slot.
+pub(crate) fn build_orchestrator_at(
+    paths: &crate::paths::ProjectPaths,
+    config: &Config,
+) -> Result<crate::orchestrator::IndexOrchestrator> {
     use std::sync::Arc;
 
-    let db_path = Config::stores_db(root);
+    let root = paths.root().to_path_buf();
+    let db_path = paths.stores_db();
+    std::fs::create_dir_all(paths.data_dir())?;
     crate::store::sqlite::SqliteStore::new(db_path.clone())?;
 
-    let embedder: Arc<dyn crate::embedder::Embedder> = Arc::from(crate::embedder::create(&config.embedding, root)?);
-    let vector_store: Arc<dyn crate::store::VectorStore> = Arc::new(resolve_store(root, config)?);
+    let embedder: Arc<dyn crate::embedder::Embedder> = Arc::from(crate::embedder::create(&config.embedding, &root)?);
+    let vector_store: Arc<dyn crate::store::VectorStore> = Arc::new(build_store(paths, config)?);
     let symbol_graph = Arc::new(crate::store::symbol_graph::SymbolGraphStore::new(db_path.clone()));
     let project_tree = Arc::new(crate::store::project_tree::ProjectTreeStore::new(db_path.clone()));
     let impact_index = Arc::new(crate::store::impact_index::ImpactIndexStore::new(db_path));
 
-    Ok(crate::orchestrator::IndexOrchestrator::new(
+    Ok(crate::orchestrator::IndexOrchestrator::with_paths(
         Arc::new(config.clone()),
-        root.clone(),
+        root,
+        paths.clone(),
         embedder,
         vector_store,
         symbol_graph,

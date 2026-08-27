@@ -29,6 +29,10 @@ pub struct IndexOrchestrator {
     pub symbol_graph: Arc<SymbolGraphStore>,
     pub project_tree: Arc<ProjectTreeStore>,
     pub impact_index: Arc<ImpactIndexStore>,
+    /// Where this project's state and stores live. Held rather than re-derived
+    /// so a caller can point the orchestrator at a non-standard data directory
+    /// — the brain vault indexes itself this way.
+    pub paths:        crate::paths::ProjectPaths,
     parser:           Arc<TreeSitterParser>,
 }
 
@@ -42,14 +46,33 @@ impl IndexOrchestrator {
         project_tree: Arc<ProjectTreeStore>,
         impact_index: Arc<ImpactIndexStore>,
     ) -> Self {
+        let paths = crate::paths::ProjectPaths::resolve(&root);
+        Self::with_paths(
+            config, root, paths, embedder, vector_store,
+            symbol_graph, project_tree, impact_index,
+        )
+    }
+
+    /// Like [`new`](Self::new), but with the data directory chosen by the
+    /// caller instead of resolved from the registry.
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_paths(
+        config:       Arc<Config>,
+        root:         PathBuf,
+        paths:        crate::paths::ProjectPaths,
+        embedder:     Arc<dyn Embedder>,
+        vector_store: Arc<dyn VectorStore>,
+        symbol_graph: Arc<SymbolGraphStore>,
+        project_tree: Arc<ProjectTreeStore>,
+        impact_index: Arc<ImpactIndexStore>,
+    ) -> Self {
         // Query overrides live under `<data-dir>/queries/<lang>/`, with a
         // project-local `.rag/queries/` still winning when present.
-        let queries = crate::paths::ProjectPaths::resolve(&root).queries();
-        let parser = Arc::new(TreeSitterParser::with_query_overrides(&queries));
+        let parser = Arc::new(TreeSitterParser::with_query_overrides(&paths.queries()));
         Self {
             config, root, embedder, vector_store,
             symbol_graph, project_tree, impact_index,
-            parser,
+            paths, parser,
         }
     }
 
@@ -96,7 +119,7 @@ impl IndexOrchestrator {
         let hash = compute_hash(&content);
 
         // Load state to check hash
-        let state_path = Config::state_path(&self.root);
+        let state_path = self.paths.state();
         let mut state  = crate::indexer::IndexState::load(&state_path)?;
 
         if !matches!(state.file_hashes.get(&rel_str), Some(h) if h == &hash) {
@@ -210,9 +233,9 @@ impl IndexOrchestrator {
 
     async fn ensure_index_inner(&self, force: bool, show_progress: bool) -> Result<EnsureIndexResult> {
         let start = Instant::now();
-        let _index_lock = crate::indexer::try_acquire_index_lock(&self.root)?;
+        let _index_lock = crate::indexer::try_acquire_index_lock(self.paths.lock())?;
 
-        let state_path = Config::state_path(&self.root);
+        let state_path = self.paths.state();
         let state      = crate::indexer::IndexState::load(&state_path)?;
 
         let scan = crate::indexer::scan_files_with_report(&self.root, &self.config.indexing)?;

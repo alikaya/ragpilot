@@ -8,6 +8,7 @@
 //! supply one. Nothing here reaches out to a network on its own.
 
 mod agents;
+mod brain;
 mod config;
 mod embedder;
 mod indexer;
@@ -85,6 +86,23 @@ async fn dispatch(observer: Option<Arc<dyn ToolObserver>>) -> anyhow::Result<()>
         }
         Some("projects") => migrate::cmd_projects(&args).await,
 
+        Some("brain") => {
+            let engine = flag_value(&args, "--engine");
+            match args.get(2).map(String::as_str) {
+                Some("init") => brain::cmd_init(engine.as_deref()).await,
+                Some("index") => {
+                    let n = brain::index().await?;
+                    println!("Indexed {n} file(s) into '{}'.", paths::BRAIN_COLLECTION);
+                    Ok(())
+                }
+                other => anyhow::bail!(
+                    "Unknown brain subcommand {:?}. Usage: ragpilot brain [init | index] [--engine <name>]\n  Engines: {}",
+                    other.unwrap_or("(none)"),
+                    brain::engine::ENGINE_NAMES.join(", ")
+                ),
+            }
+        }
+
         Some("hooks") => cmd_hooks().await,
         Some("doctor") => cmd_doctor().await,
 
@@ -103,6 +121,8 @@ async fn dispatch(observer: Option<Arc<dyn ToolObserver>>) -> anyhow::Result<()>
                    ragpilot projects list          List registered projects\n\
                    ragpilot projects rm <id>       Unregister + delete its data and collection\n\
                    ragpilot projects relink <id> <path>  Point a project at its new folder\n\
+                   ragpilot brain init [--engine <name>]  Set up the second-brain vault\n\
+                   ragpilot brain index            Re-index the brain vault\n\
                    ragpilot update                 Re-index changed files\n\
                    ragpilot status                 Show index statistics\n\
 \n\
@@ -336,6 +356,21 @@ async fn cmd_doctor() -> anyhow::Result<()> {
     println!(r#"    {{"mcpServers":{{"ragpilot":{{"type":"stdio","command":"ragpilot","args":["--mcp-server"]}}}}}}"#);
 
     Ok(())
+}
+
+/// Read `--flag value` or `--flag=value` from the argument list.
+fn flag_value(args: &[String], flag: &str) -> Option<String> {
+    let eq = format!("{flag}=");
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        if a == flag {
+            return it.next().cloned();
+        }
+        if let Some(v) = a.strip_prefix(&eq) {
+            return Some(v.to_string());
+        }
+    }
+    None
 }
 
 fn check(label: &str, ok: bool) {

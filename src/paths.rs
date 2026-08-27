@@ -84,6 +84,9 @@ pub fn project_dir(id: &str) -> PathBuf { projects_dir().join(id) }
 /// The second-brain vault (Phase A) — one per machine, not per project.
 pub fn brain_dir() -> PathBuf { data_root().join("brain") }
 
+/// The brain's Qdrant collection. Fixed, because there is exactly one brain.
+pub const BRAIN_COLLECTION: &str = "ragpilot_brain";
+
 // ── Identity ───────────────────────────────────────────────────────────────
 
 /// Resolve symlinks and `..` so the same folder always yields the same key.
@@ -474,6 +477,14 @@ impl ProjectPaths {
         let root = canonical(root).unwrap_or_else(|_| root.to_path_buf());
         let id = project_id(&root);
         Self { data: project_dir(&id), root, id: Some(id) }
+    }
+
+    /// The brain vault as a self-contained project: its markdown, its index
+    /// state and its stores all live in the same directory, and its collection
+    /// name is fixed rather than derived from a path.
+    pub fn brain() -> Self {
+        let root = brain_dir();
+        Self { data: root.clone(), root, id: Some(BRAIN_COLLECTION.to_string()) }
     }
 
     /// The project's own `.rag/` — the migrate *source*, never a write target
