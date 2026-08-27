@@ -550,6 +550,29 @@ fn load_registry_lenient() -> Registry {
     }
 }
 
+/// Canonicalize a folder, record it in the registry and create its data
+/// directory. Idempotent — re-running `init` neither changes the id nor
+/// rewrites `created`.
+///
+/// A legacy `.rag/` project is left alone: adopting it into the registry is
+/// `ragpilot migrate`'s job, not something `init` should do behind the user's
+/// back while its data still lives in the project folder.
+pub fn register_project(root: &Path) -> Result<ProjectPaths> {
+    let paths = ProjectPaths::resolve(root);
+    if paths.is_legacy() {
+        return Ok(paths);
+    }
+
+    let mut registry = Registry::load()?;
+    registry.upsert(paths.root());
+    registry.save()?;
+
+    std::fs::create_dir_all(paths.data_dir()).with_context(|| {
+        format!("Cannot create project data dir: {}", paths.data_dir().display())
+    })?;
+    Ok(paths)
+}
+
 // ── Tests ──────────────────────────────────────────────────────────────────
 
 #[cfg(test)]

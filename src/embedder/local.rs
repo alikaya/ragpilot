@@ -101,7 +101,7 @@ impl LocalEmbedder {
                  The first run downloads the model (~130MB) from huggingface.co.\n\
                  On an offline/air-gapped machine, copy a populated cache from a\n\
                  networked machine to that path (or point embedding.local.cache_dir\n\
-                 in .rag/config.toml at one), then retry.",
+                 in the project config at one), then retry.",
                 cache_dir.display()
             )
         })?;

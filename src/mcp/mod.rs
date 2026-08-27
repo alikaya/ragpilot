@@ -163,7 +163,7 @@ pub async fn run_server_with(observer: Option<Arc<dyn ToolObserver>>) -> anyhow:
 
 /// Build the full server context (config + embedder + stores + orchestrator, and
 /// start the watcher when enabled) for a given project root. Fails if the root
-/// has no readable `.rag/config.toml` or a store cannot be opened.
+/// has no readable project config or a store cannot be opened.
 async fn build_context(root: &std::path::Path) -> anyhow::Result<Arc<McpContext>> {
     let config_path = Config::config_path(root);
     let config = Arc::new(Config::load(&config_path)?);

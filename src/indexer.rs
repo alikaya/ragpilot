@@ -619,22 +619,14 @@ pub async fn cmd_init(force: bool) -> Result<()> {
     use colored::Colorize;
 
     let root = current_root()?;
-    let paths = crate::paths::ProjectPaths::resolve(&root);
+    // Register the project (idempotent) so the MCP server can find it by
+    // folder afterwards. A legacy `.rag/` project is left as it is.
+    let paths = crate::paths::register_project(&root)?;
     let config_path = paths.config();
-
-    // A project on the global layout is recorded in the registry, so the MCP
-    // server (and `projects list`) can find it by folder afterwards. Legacy
-    // `.rag/` projects stay unregistered until `ragpilot migrate` runs.
-    if !paths.is_legacy() {
-        let mut registry = crate::paths::Registry::load()?;
-        registry.upsert(paths.root());
-        registry.save()?;
-    }
 
     // Only generate config when it's missing. `--force` drives a full
     // re-index (below) but must NOT clobber a user-customized config.
     if !config_path.exists() {
-        std::fs::create_dir_all(paths.data_dir())?;
         let project_name = root
             .file_name()
             .map(|n| n.to_string_lossy().to_string())

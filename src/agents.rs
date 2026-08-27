@@ -74,7 +74,7 @@ pub fn configure(agent: &str, root: &Path) -> Result<()> {
 
 fn claude(root: &Path) -> Result<()> {
     write_json_mcp(&root.join(".mcp.json"), "mcpServers", server_entry(true), ".mcp.json", &[])?;
-    write_doc(&root.join("CLAUDE.md"), crate::CLAUDE_MD, "CLAUDE.md")
+    upsert_doc(&root.join("CLAUDE.md"), crate::CLAUDE_MD, "CLAUDE.md")
 }
 
 fn opencode(root: &Path) -> Result<()> {
@@ -87,7 +87,7 @@ fn opencode(root: &Path) -> Result<()> {
     });
     let schema = ("$schema", json!("https://opencode.ai/config.json"));
     write_json_mcp(&root.join("opencode.json"), "mcp", entry, "opencode.json", &[schema])?;
-    write_doc(&root.join("AGENTS.md"), crate::AGENTS_MD, "AGENTS.md")
+    upsert_doc(&root.join("AGENTS.md"), crate::AGENTS_MD, "AGENTS.md")
 }
 
 fn antigravity(root: &Path) -> Result<()> {
@@ -102,19 +102,19 @@ fn antigravity(root: &Path) -> Result<()> {
         Some("CLI (agy) + IDE 2.0 share this config. CLI-only path: ~/.gemini/antigravity-cli/mcp_config.json"),
         root,
     );
-    write_doc(&root.join("AGENTS.md"), crate::AGENTS_MD, "AGENTS.md")
+    upsert_doc(&root.join("AGENTS.md"), crate::AGENTS_MD, "AGENTS.md")
 }
 
 fn cursor(root: &Path) -> Result<()> {
     write_json_mcp(&root.join(".cursor/mcp.json"), "mcpServers", server_entry(false), ".cursor/mcp.json", &[])?;
-    write_doc(&root.join("AGENTS.md"), crate::AGENTS_MD, "AGENTS.md")
+    upsert_doc(&root.join("AGENTS.md"), crate::AGENTS_MD, "AGENTS.md")
 }
 
 fn vscode(root: &Path) -> Result<()> {
     // VS Code is the odd one out: root key is `servers` (NOT `mcpServers`) and
     // an explicit `"type": "stdio"` is expected.
     write_json_mcp(&root.join(".vscode/mcp.json"), "servers", server_entry(true), ".vscode/mcp.json", &[])?;
-    write_doc(&root.join("AGENTS.md"), crate::AGENTS_MD, "AGENTS.md")
+    upsert_doc(&root.join("AGENTS.md"), crate::AGENTS_MD, "AGENTS.md")
 }
 
 fn codex(root: &Path) -> Result<()> {
@@ -159,7 +159,7 @@ fn codex(root: &Path) -> Result<()> {
         println!("{} .codex/config.toml", "✓".green());
     }
 
-    write_doc(&root.join("AGENTS.md"), crate::AGENTS_MD, "AGENTS.md")
+    upsert_doc(&root.join("AGENTS.md"), crate::AGENTS_MD, "AGENTS.md")
 }
 
 // ─── JSON MCP config helpers ───────────────────────────────────────────────────
@@ -248,14 +248,70 @@ fn write_json_mcp(
     Ok(())
 }
 
-fn write_doc(path: &Path, content: &str, display: &str) -> Result<()> {
-    if path.exists() {
-        println!("{} {} (already exists)", "i".blue(), display);
-    } else {
-        std::fs::write(path, content)?;
+// ─── Agent markdown block ──────────────────────────────────────────────────────
+
+/// Markers around the ragpilot section of an agent markdown file. Everything
+/// between them belongs to ragpilot and is rewritten on each `init`; everything
+/// outside is the user's and is never touched.
+pub const BLOCK_START: &str = "<!-- ragpilot:start -->";
+pub const BLOCK_END: &str = "<!-- ragpilot:end -->";
+
+/// Write the ragpilot instructions into an agent markdown file (`CLAUDE.md`,
+/// `AGENTS.md`) without ever duplicating them:
+///
+/// * no file — create it holding just the marked block;
+/// * marked block — replace it in place;
+/// * unmarked file that is byte-for-byte the doc an older ragpilot wrote —
+///   upgrade it to the marked form;
+/// * any other file — append the block, leaving the user's text alone.
+fn upsert_doc(path: &Path, body: &str, display: &str) -> Result<()> {
+    let block = format!("{BLOCK_START}\n{}\n{BLOCK_END}\n", body.trim_end_matches('\n'));
+
+    if !path.exists() {
+        std::fs::write(path, &block)?;
         println!("{} {}", "✓".green(), display);
+        return Ok(());
     }
+
+    let existing = std::fs::read_to_string(path)?;
+    let updated = match block_span(&existing) {
+        Some((start, end)) => {
+            format!("{}{}{}", &existing[..start], block.trim_end_matches('\n'), &existing[end..])
+        }
+        // Written by a pre-marker ragpilot and never edited since: replace it
+        // wholesale rather than appending a second copy of the same text.
+        None if existing.trim_end() == body.trim_end() => block.clone(),
+        None => {
+            if existing.contains(BLOCK_START) || existing.contains(BLOCK_END) {
+                println!(
+                    "{} {} has an unterminated ragpilot marker — appending a fresh block; \
+                     delete the stray marker to tidy up.",
+                    "!".yellow(),
+                    display
+                );
+            }
+            let mut out = existing.clone();
+            if !out.ends_with('\n') { out.push('\n'); }
+            out.push('\n');
+            out.push_str(&block);
+            out
+        }
+    };
+
+    if updated == existing {
+        println!("{} {} (ragpilot block already current)", "i".blue(), display);
+        return Ok(());
+    }
+    std::fs::write(path, updated)?;
+    println!("{} {} (ragpilot block updated)", "✓".green(), display);
     Ok(())
+}
+
+/// Byte range of a complete `start … end` marker pair, if there is one.
+fn block_span(text: &str) -> Option<(usize, usize)> {
+    let start = text.find(BLOCK_START)?;
+    let end = text[start..].find(BLOCK_END)? + start + BLOCK_END.len();
+    Some((start, end))
 }
 
 // ─── Global-only clients ───────────────────────────────────────────────────────
@@ -282,4 +338,108 @@ fn global_snippet(name: &str, path: &str, root_key: &str, include_type: bool, hi
         println!("  {}", h.dimmed());
     }
     println!("{}", snippet);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    const BODY: &str = "## RagPilot\n- Call `rag_search` first.";
+
+    fn scratch_file(label: &str) -> std::path::PathBuf {
+        static N: AtomicUsize = AtomicUsize::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "ragpilot-agents-{}-{}-{}",
+            std::process::id(),
+            N.fetch_add(1, Ordering::SeqCst),
+            label
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir.join("AGENTS.md")
+    }
+
+    #[test]
+    fn creates_the_file_with_a_marked_block() {
+        let path = scratch_file("create");
+        upsert_doc(&path, BODY, "AGENTS.md").unwrap();
+
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.starts_with(BLOCK_START));
+        assert!(text.trim_end().ends_with(BLOCK_END));
+        assert!(text.contains("rag_search"));
+
+        std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn rerunning_never_duplicates_the_block() {
+        let path = scratch_file("idempotent");
+        upsert_doc(&path, BODY, "AGENTS.md").unwrap();
+        let once = std::fs::read_to_string(&path).unwrap();
+
+        upsert_doc(&path, BODY, "AGENTS.md").unwrap();
+        upsert_doc(&path, BODY, "AGENTS.md").unwrap();
+
+        let thrice = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(once, thrice);
+        assert_eq!(thrice.matches(BLOCK_START).count(), 1);
+
+        std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn keeps_user_content_and_updates_only_the_block() {
+        let path = scratch_file("user-content");
+        std::fs::write(&path, "# My rules\n\nNever force-push.\n").unwrap();
+
+        upsert_doc(&path, BODY, "AGENTS.md").unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.starts_with("# My rules"));
+        assert!(text.contains("Never force-push."));
+        assert!(text.contains(BLOCK_START));
+
+        // A changed body rewrites the block in place, user text untouched.
+        upsert_doc(&path, "## RagPilot\n- Call `context_bundle` first.", "AGENTS.md").unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains("Never force-push."));
+        assert!(text.contains("context_bundle"));
+        assert!(!text.contains("rag_search"));
+        assert_eq!(text.matches(BLOCK_START).count(), 1);
+
+        std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn upgrades_an_unmarked_doc_written_by_an_older_ragpilot() {
+        let path = scratch_file("upgrade");
+        std::fs::write(&path, format!("{BODY}\n")).unwrap();
+
+        upsert_doc(&path, BODY, "AGENTS.md").unwrap();
+
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.starts_with(BLOCK_START));
+        // The policy text appears exactly once — not appended beside itself.
+        assert_eq!(text.matches("rag_search").count(), 1);
+
+        std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn block_span_needs_both_markers_in_order() {
+        assert!(block_span("nothing here").is_none());
+        assert!(block_span(&format!("{BLOCK_END} stray")).is_none());
+        assert!(block_span(&format!("{BLOCK_START} unterminated")).is_none());
+
+        let text = format!("a{BLOCK_START}b{BLOCK_END}c");
+        let (s, e) = block_span(&text).unwrap();
+        assert_eq!(&text[s..e], format!("{BLOCK_START}b{BLOCK_END}"));
+    }
+
+    #[test]
+    fn project_and_global_client_lists_stay_disjoint() {
+        for client in PROJECT_CLIENTS {
+            assert!(!GLOBAL_CLIENTS.contains(client), "{client} is in both lists");
+        }
+    }
 }

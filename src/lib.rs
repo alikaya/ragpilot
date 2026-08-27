@@ -108,7 +108,7 @@ async fn dispatch(observer: Option<Arc<dyn ToolObserver>>) -> anyhow::Result<()>
                    ragpilot init /path/to/myapp claude\n\
                    ragpilot init . claude\n\
                  \n\
-                 MCP registration (.claude/settings.json):\n\
+                 MCP registration (.mcp.json):\n\
                    {{\"mcpServers\":{{\"ragpilot\":{{\"type\":\"stdio\",\"command\":\"ragpilot\",\"args\":[\"--mcp-server\"]}}}}}}"
             );
             std::process::exit(1);
@@ -298,19 +298,27 @@ async fn cmd_doctor() -> anyhow::Result<()> {
     };
     check("Git hooks installed (run 'ragpilot hooks')", has_hook);
 
-    // 6. MCP registration
-    let mcp_settings = root.join(".claude/settings.json");
-    let mcp_ok = mcp_settings.exists() && {
-        std::fs::read_to_string(&mcp_settings)
-            .map(|c| c.contains("ragpilot") && c.contains("mcp-server"))
-            .unwrap_or(false)
-    };
-    check("Claude Code MCP registration (.claude/settings.json)", mcp_ok);
+    // 6. MCP registration. `init` writes `.mcp.json`; `.claude/settings.json`
+    // is still honoured because older setups registered the server there.
+    let registered_in = [".mcp.json", ".claude/settings.json"]
+        .into_iter()
+        .find(|rel| {
+            std::fs::read_to_string(root.join(rel))
+                .map(|c| c.contains("ragpilot") && c.contains("mcp-server"))
+                .unwrap_or(false)
+        });
+    check(
+        &format!(
+            "Claude Code MCP registration ({})",
+            registered_in.unwrap_or(".mcp.json")
+        ),
+        registered_in.is_some(),
+    );
 
     println!("\n{}", "─── Quick Fix ──────────────────────────────────".bold());
     println!("  ragpilot init     Index the project");
     println!("  ragpilot hooks    Install git hooks");
-    println!("  Add to .claude/settings.json:");
+    println!("  Or register the server by hand in .mcp.json:");
     println!(r#"    {{"mcpServers":{{"ragpilot":{{"type":"stdio","command":"ragpilot","args":["--mcp-server"]}}}}}}"#);
 
     Ok(())
@@ -350,11 +358,23 @@ async fn cmd_setup(args: &[String]) -> anyhow::Result<()> {
     };
 
     // Create directory if needed
-    if !root.exists() {
+    let created = !root.exists();
+    if created {
         std::fs::create_dir_all(&root)?;
+    }
+
+    // Canonicalize, register, and create `<data_root>/projects/<id>/`. From
+    // here on `root` is the canonical path, so the MCP snippets and the
+    // registry key agree with what the server resolves at startup.
+    let project_paths = paths::register_project(&root)?;
+    let root = project_paths.root().to_path_buf();
+    if created {
         println!("{} Created directory: {}", "✓".green(), root.display());
     } else {
         println!("{} Directory: {}", "i".blue(), root.display());
+    }
+    if let Some(id) = project_paths.id() {
+        println!("{} Project id: {}", "✓".green(), id.bold());
     }
 
     let project_name = root
@@ -362,12 +382,9 @@ async fn cmd_setup(args: &[String]) -> anyhow::Result<()> {
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "project".to_string());
 
-    // The project config now lives in the project's data directory — under
-    // `<data_root>/projects/<id>/` for a new project, or the legacy `.rag/`
-    // for one that has not migrated yet.
-    let project_paths = paths::ProjectPaths::resolve(&root);
+    // The project config lives in that data directory — nothing but the MCP
+    // config and the agent markdown is written into the project folder.
     let config_path = project_paths.config();
-    std::fs::create_dir_all(project_paths.data_dir())?;
     if !config_path.exists() {
         let choices = wizard::configure(&root);
         std::fs::write(
@@ -511,7 +528,7 @@ All discovery and analysis must go through the `rag` MCP server.
 ## MCP Server
 
 The `rag` MCP server is automatically active in this project.
-It is registered in `.claude/settings.json`.
+It is registered in `.mcp.json`.
 
 Available tools:
 
