@@ -11,6 +11,7 @@ use crate::store::impact_index::ImpactIndexStore;
 use crate::store::project_tree::ProjectTreeStore;
 use crate::store::symbol_graph::SymbolGraphStore;
 use crate::orchestrator::IndexOrchestrator;
+use crate::paths::{self, Registry, Resolution};
 use crate::watcher::FileWatcher;
 use protocol::{McpRequest, McpResponse};
 use tools::McpContext;
@@ -52,27 +53,50 @@ pub async fn run_server_with(observer: Option<Arc<dyn ToolObserver>>) -> anyhow:
     //      clients launched inside the project — claude/codex/cursor/…).
     let explicit_root = resolve_explicit_root();
 
-    // Eager build: an explicit root, or a cwd that already has a config. Missing
-    // config no longer aborts the process — we start regardless and answer the
-    // handshake, so the client never sees an "EOF" mid-initialize.
-    let eager_root = explicit_root.clone().or_else(|| {
-        std::env::current_dir()
-            .ok()
-            .filter(|cwd| Config::config_path(cwd).exists())
+    // The registry maps canonical folder → project id. A broken registry is
+    // loud but not fatal: the handshake must still answer, and projects that
+    // predate the global layout keep working from their own `.rag/`.
+    let registry = Registry::load().unwrap_or_else(|e| {
+        eprintln!("ragpilot: registry unreadable ({e}) — continuing without it.");
+        Registry::default()
     });
 
+    // Eager build: an explicit root, else the cwd — resolved against the
+    // registry so an unregistered or moved folder gets a specific diagnosis
+    // instead of silence. Missing config no longer aborts the process; we
+    // start regardless and answer the handshake, so the client never sees an
+    // "EOF" mid-initialize.
+    let startup = explicit_root
+        .clone()
+        .or_else(|| std::env::current_dir().ok())
+        .map(|p| paths::resolve_project(&registry, &p));
+
     let mut ctx: Option<Arc<McpContext>> = None;
-    if let Some(r) = eager_root {
-        match build_context(&r).await {
-            Ok(c)  => ctx = Some(c),
-            Err(e) => eprintln!("ragpilot: could not load project at {}: {e}", r.display()),
+    match &startup {
+        Some(resolution) if resolution.is_usable() => {
+            let root = resolution.root().to_path_buf();
+            if matches!(resolution, Resolution::Legacy { .. }) {
+                eprintln!("{}", resolution.message());
+            }
+            match build_context(&root).await {
+                Ok(c)  => ctx = Some(c),
+                Err(e) => {
+                    let msg = format!("ragpilot: could not load project at {}: {e}", root.display());
+                    eprintln!("{msg}");
+                    tools::set_no_project_hint(msg);
+                }
+            }
         }
-    }
-    if ctx.is_none() {
-        eprintln!(
+        // Not registered, or a folder that looks like a moved project: say
+        // exactly which, and let the agent see the same text on a tool call.
+        Some(resolution) => {
+            eprintln!("{}", resolution.message());
+            tools::set_no_project_hint(resolution.message());
+        }
+        None => eprintln!(
             "ragpilot: no project loaded yet — waiting for the client to announce a \
              workspace root, or pass --root <path> / set RAGPILOT_ROOT."
-        );
+        ),
     }
 
     // ── stdio JSON-RPC loop ────────────────────────────────────────────────
@@ -104,14 +128,19 @@ pub async fn run_server_with(observer: Option<Arc<dyn ToolObserver>>) -> anyhow:
         // — only when no project is loaded yet and no explicit root was pinned.
         if ctx.is_none() && explicit_root.is_none() && request.method == "initialize" {
             if let Some(r) = workspace_root_from_initialize(&request) {
-                if Config::config_path(&r).exists() {
-                    match build_context(&r).await {
+                let resolution = paths::resolve_project(&registry, &r);
+                if resolution.is_usable() {
+                    let root = resolution.root().to_path_buf();
+                    match build_context(&root).await {
                         Ok(c)  => {
-                            eprintln!("ragpilot: loaded project from client workspace {}", r.display());
+                            eprintln!("ragpilot: loaded project from client workspace {}", root.display());
                             ctx = Some(c);
                         }
-                        Err(e) => eprintln!("ragpilot: could not load workspace {}: {e}", r.display()),
+                        Err(e) => eprintln!("ragpilot: could not load workspace {}: {e}", root.display()),
                     }
+                } else {
+                    eprintln!("{}", resolution.message());
+                    tools::set_no_project_hint(resolution.message());
                 }
             }
         }

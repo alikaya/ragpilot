@@ -72,8 +72,27 @@ pub struct McpContext {
 /// project directory. `initialize` and `tools/list` still succeed so the
 /// handshake never fails; only tool calls need a loaded project.
 const NO_PROJECT_MSG: &str = "ragpilot: no project is loaded. Launch the server with \
-`--root <path>`, set the RAGPILOT_ROOT environment variable, or open a folder that \
-contains a .rag/config.toml (run `ragpilot init` there first).";
+`--root <path>`, set the RAGPILOT_ROOT environment variable, or open a registered \
+project folder (run `ragpilot init .` there first).";
+
+/// Filled in at startup with the resolution-specific reason a project could not
+/// be loaded — "not registered", "looks like it moved, run `projects relink`",
+/// and so on. Falls back to [`NO_PROJECT_MSG`] when the server never got far
+/// enough to resolve a folder.
+static NO_PROJECT_HINT: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// Record why no project is loaded. First call wins; later ones are ignored so
+/// the original startup diagnosis is what the agent eventually sees.
+pub fn set_no_project_hint(message: String) {
+    let _ = NO_PROJECT_HINT.set(message);
+}
+
+fn no_project_message() -> String {
+    NO_PROJECT_HINT
+        .get()
+        .cloned()
+        .unwrap_or_else(|| NO_PROJECT_MSG.to_string())
+}
 
 const DEFAULT_SEARCH_DESC: &str = "Searches the local project codebase and documentation \
 using semantic similarity. Returns relevant code snippets and docs with file paths.";
@@ -86,7 +105,7 @@ pub async fn handle_request(req: &McpRequest, ctx: Option<&Arc<McpContext>>) -> 
         "tools/list"  => handle_tools_list(req, ctx.map(|c| &**c)),
         "tools/call"  => match ctx {
             Some(c) => handle_tools_call(req, c).await,
-            None    => McpResponse::tool_error(req.id.clone(), NO_PROJECT_MSG.to_string()),
+            None    => McpResponse::tool_error(req.id.clone(), no_project_message()),
         },
         other => McpResponse::error(-32601, &format!("Method not found: {other}"), req.id.clone()),
     }

@@ -13,6 +13,7 @@ mod embedder;
 mod indexer;
 mod orchestrator;
 mod parser;
+mod paths;
 mod semantic_diff;
 mod skeleton;
 mod store;
