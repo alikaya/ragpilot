@@ -149,7 +149,16 @@ pub async fn run_server_with(observer: Option<Arc<dyn ToolObserver>>) -> anyhow:
 
         // Generic observation seam, strictly after the response is sent so it
         // can never slow or fail a tool call. No-op unless a build supplied one.
+        //
+        // Brain traffic is excluded outright. The brain holds the user's own
+        // content — notes, decisions, personal context — while an observer
+        // exists to report on *project* usage. Keeping brain calls out of the
+        // seam makes "brain data never reaches reporting" a property of this
+        // code rather than a promise another build has to keep.
         if let (Some(obs), Some(c)) = (observer.as_ref(), ctx.as_ref()) {
+            if tools::is_brain_request(&request) {
+                continue;
+            }
             obs.observe(
                 &ObserverContext { project: &c.config.project.name, root: &c.root },
                 &request,

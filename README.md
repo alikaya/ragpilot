@@ -20,7 +20,7 @@ Provides tools to AI agents — Claude Code, Codex, Cursor, VS Code, opencode, A
 
 - **Semantic search** — Vector-based code search with Qdrant + fastembed
 - **Symbol graph** — Function/struct/class definitions, import and call relationships
-- **Multi-language parsing** — Tree-sitter symbol & call extraction for Rust, Python, JavaScript, TypeScript, Go, Java, C, C++, C#, Ruby and PHP (regex fallback for other languages); queries live in `queries/<lang>/*.scm` and can be overridden per project under `.rag/queries/`
+- **Multi-language parsing** — Tree-sitter symbol & call extraction for Rust, Python, JavaScript, TypeScript, Go, Java, C, C++, C#, Ruby and PHP (regex fallback for other languages); queries live in `queries/<lang>/*.scm` and can be overridden per project
 - **Impact analysis** — Show which files would be affected before refactoring
 - **Context bundling** — Complete context in a single call with token budgeting
 - **Incremental indexing** — Re-index only changed files
@@ -176,7 +176,7 @@ ragpilot setup /home/user/vueadmin codex
 # Setup with Claude Code
 ragpilot setup /home/user/api-server claude
 
-# Index only src/ and lib/ directories (.rag/config.toml)
+# Index only src/ and lib/ directories (project config)
 # include_dirs = ["src", "lib"]
 ragpilot update
 ```
@@ -205,6 +205,46 @@ AI agents use these tools automatically:
 
 ---
 
+## Where your data lives
+
+Since 0.6.0 a project keeps **nothing but the MCP config and the agent markdown
+file** in its own folder. Everything RagPilot writes lives under one
+machine-global root:
+
+```
+~/.local/share/ragpilot/          # or $RAGPILOT_DATA_DIR
+  config.toml                     # global defaults (Qdrant URL, embedding model)
+  registry.json                   # canonical project path → project id
+  projects/<id>/                  # config.toml, state.json, stores.db, queries/
+  brain/                          # the second brain (see below)
+```
+
+A project id is `<folder-slug>-<hash of its canonical path>`, which is also its
+Qdrant collection name. `ragpilot paths` prints where any project's data lives.
+
+```bash
+ragpilot projects list                       # every registered project
+ragpilot projects relink <id> <new-path>     # after moving a folder
+ragpilot projects rm <id>                    # unregister + delete its data
+```
+
+### Upgrading a `.rag/` project
+
+Projects created before 0.6.0 keep working, with a one-line reminder on each
+command. When you are ready:
+
+```bash
+cd /path/to/project
+ragpilot migrate            # --keep leaves .rag/ in place as a fallback
+```
+
+Migration **does not re-index**. The existing Qdrant collection is aliased to
+the new name, so it costs no embedding calls and search results are identical
+either side of it. Configuration and state are moved, the project is registered,
+and `.rag/` is removed only after you confirm.
+
+---
+
 ## Second brain
 
 RagPilot can also keep a **second brain**: a persistent memory that belongs to
@@ -230,7 +270,10 @@ you** — the file is written to be executed, not just read.
 
 ## Configuration
 
-The `.rag/config.toml` file is automatically created with `ragpilot init`:
+The project `config.toml` is created automatically by `ragpilot init`
+(`ragpilot paths` prints its location). Machine-wide defaults can go in
+`~/.local/share/ragpilot/config.toml`; the precedence is
+**environment > project config > global config > built-in defaults**.
 
 ```toml
 [project]
@@ -278,7 +321,7 @@ search run fully offline (verified with all network access blocked).
 
 The cache location is resolved in this order:
 
-1. `embedding.local.cache_dir` in `.rag/config.toml` (if set)
+1. `embedding.local.cache_dir` in the project config (if set)
 2. `<project>/.fastembed_cache/` (if it already exists)
 3. `~/.cache/ragpilot/models/` — shared user-level default, so the model is
    downloaded once per machine, not once per project
@@ -344,7 +387,7 @@ src/
       context.rs       context_bundle
       index.rs         rag_index_status + rag_ensure_index
       review.rs        review_semantic_diff
-queries/               Per-language tree-sitter queries (.scm) — embedded, overridable via .rag/queries/
+queries/               Per-language tree-sitter queries (.scm) — embedded, overridable per project
 benchmark/             Reproducible performance / token-efficiency harness (run_benchmark.sh)
 ```
 
@@ -355,13 +398,18 @@ benchmark/             Reproducible performance / token-efficiency harness (run_
 ## Data Storage
 
 ```
-.rag/
+~/.local/share/ragpilot/projects/<id>/
   config.toml    Project configuration
   state.json     File hash table (change detection)
   stores.db      SQLite: symbols, tree, dependencies
+  queries/       Per-project tree-sitter query overrides
 ```
 
-Qdrant collection: `<project_name>` (lowercase, spaces → `_`)
+Qdrant collection: the project id, `<folder-slug>-<path-hash>`.
+Run `ragpilot paths` to see the resolved locations for any project.
+
+Projects created before 0.6.0 keep everything in a project-local `.rag/`
+directory and continue to work — see [Upgrading a `.rag/` project](#upgrading-a-rag-project).
 
 ---
 

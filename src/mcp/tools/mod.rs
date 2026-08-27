@@ -98,6 +98,28 @@ fn no_project_message() -> String {
 const DEFAULT_SEARCH_DESC: &str = "Searches the local project codebase and documentation \
 using semantic similarity. Returns relevant code snippets and docs with file paths.";
 
+/// Whether a request is a `brain_*` tool call.
+///
+/// Used to keep brain traffic out of the observation seam: the brain holds the
+/// user's own content — notes, decisions, personal context — and a build that
+/// supplies an observer must never see it. Excluding it here makes that
+/// structural rather than a rule an observer is asked to follow.
+pub fn is_brain_request(req: &McpRequest) -> bool {
+    if req.method != "tools/call" {
+        return false;
+    }
+    let Some(name) = req
+        .params
+        .as_ref()
+        .and_then(|p| p.get("name"))
+        .and_then(|n| n.as_str())
+    else {
+        return false;
+    };
+    let normalized = name.replace('.', "_");
+    brain::TOOL_NAMES.contains(&normalized.as_str())
+}
+
 pub async fn handle_request(req: &McpRequest, ctx: Option<&Arc<McpContext>>) -> McpResponse {
     match req.method.as_str() {
         // Handshake methods never depend on a loaded project, so they always
@@ -222,5 +244,40 @@ mod path_safety_tests {
         let root = Path::new("/home/user/project");
         let p = resolve_in_root(root, "src/main.rs").unwrap();
         assert_eq!(p, Path::new("/home/user/project/src/main.rs"));
+    }
+}
+
+#[cfg(test)]
+mod observation_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn call(name: &str) -> McpRequest {
+        serde_json::from_value(json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": { "name": name, "arguments": {} }
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn brain_traffic_is_kept_out_of_the_observation_seam() {
+        // Every brain tool, including the dotted legacy spelling.
+        for name in brain::TOOL_NAMES {
+            assert!(is_brain_request(&call(name)), "{name} would be observed");
+        }
+        assert!(is_brain_request(&call("brain.note")));
+
+        // Project tools are observable, as they always were.
+        for name in ["rag_search", "context_bundle", "nav_call_graph", "rag_index_status"] {
+            assert!(!is_brain_request(&call(name)), "{name} should stay observable");
+        }
+
+        // Non-tool traffic is not a brain call.
+        let initialize: McpRequest =
+            serde_json::from_value(json!({"jsonrpc":"2.0","id":1,"method":"initialize"})).unwrap();
+        assert!(!is_brain_request(&initialize));
     }
 }

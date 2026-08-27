@@ -102,9 +102,18 @@ for _ in 1 2 3; do
 done
 STARTUP_AVG=$((STARTUP_SUM / 3))
 
+# ── resolve where this project's data actually lives ──────────────────────────
+# Since 0.6.0 a project's state/stores/config live under the global data root,
+# not in a `.rag/` directory, so the layout is asked for rather than assumed.
+# Older binaries have no `paths` command; fall back to the legacy locations.
+eval "$("$BIN" paths 2>/dev/null | sed 's/^/RP_/' | sed 's/=/="/; s/$/"/')" || true
+RP_STATE="${RP_state:-$ROOT/.rag/state.json}"
+RP_CONFIG="${RP_config:-$ROOT/.rag/config.toml}"
+RP_DATA_DIR="${RP_data_dir:-$ROOT/.rag}"
+
 # ── initial index guarantee ───────────────────────────────────────────────────
 echo "» index guarantee"
-if [ -f "$ROOT/.rag/state.json" ]; then
+if [ -f "$RP_STATE" ]; then
   cli_time "$RAW/index_init.txt" "$BIN" update
 else
   cli_time "$RAW/index_init.txt" "$BIN" init
@@ -119,7 +128,7 @@ RAM="$(free -h 2>/dev/null | awk '/^Mem:/{print $2}')"; [ -z "$RAM" ] && RAM="?"
 BIN_VERSION="$("$BIN" --version 2>&1 | head -1)"
 SERVER_VERSION="$(printf '%s\n' "$INIT_MSG" | timeout 20 "$BIN" --mcp-server 2>/dev/null | jq -r 'select(.id==1)|.result.serverInfo.version // empty' 2>/dev/null | head -1)"
 [ -z "$SERVER_VERSION" ] && SERVER_VERSION="unknown"
-COLLECTION="$(grep -m1 -E '^\s*collection' "$ROOT/.rag/config.toml" 2>/dev/null | sed 's/.*=\s*//; s/"//g')"
+COLLECTION="${RP_collection:-$(grep -m1 -E '^\s*collection' "$RP_CONFIG" 2>/dev/null | sed 's/.*=\s*//; s/"//g')}"
 INDEXED="$(grep -oE 'Files indexed:[[:space:]]*[0-9]+' "$RAW/status_before.txt" | grep -oE '[0-9]+' | head -1)"
 CHUNKS="$(grep -oE 'Chunks:[[:space:]]*~?[0-9]+' "$RAW/status_before.txt" | grep -oE '[0-9]+' | head -1)"
 MODEL="$(grep -oE 'Embedding model:[[:space:]]*.*' "$RAW/status_before.txt" | sed 's/.*model:[[:space:]]*//' | head -1)"
@@ -138,6 +147,8 @@ PROJECT_FILES="$(find . -type f \
   echo "server_version=$SERVER_VERSION"
   echo "qdrant=$QDRANT"
   echo "collection=$COLLECTION"
+  echo "layout=${RP_layout:-legacy}"
+  echo "data_dir=$RP_DATA_DIR"
   echo "indexed=$INDEXED"
   echo "chunks=$CHUNKS"
   echo "model=$MODEL"
@@ -148,9 +159,9 @@ PROJECT_FILES="$(find . -type f \
 } > "$RAW/env.txt"
 
 # ── temp-file location for the touch scenario (portable across projects) ──────
-# Derive an indexed dir + extension from .rag/config.toml so the temp file is
+# Derive an indexed dir + extension from the project config so the temp file is
 # actually picked up by `update` on any project, not just src/*.md repos.
-TOUCH_REL="$(python3 - "$ROOT/.rag/config.toml" <<'PY' 2>/dev/null
+TOUCH_REL="$(python3 - "$RP_CONFIG" <<'PY' 2>/dev/null
 import sys, re
 try:
     t = open(sys.argv[1]).read()

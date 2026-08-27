@@ -138,6 +138,8 @@ async fn dispatch(observer: Option<Arc<dyn ToolObserver>>) -> anyhow::Result<()>
             }
         }
 
+        Some("paths") => cmd_paths(),
+
         Some("hooks") => cmd_hooks().await,
         Some("doctor") => cmd_doctor().await,
 
@@ -165,6 +167,7 @@ async fn dispatch(observer: Option<Arc<dyn ToolObserver>>) -> anyhow::Result<()>
                    ragpilot brain hooks            Install the Claude Code session hooks here\n\
                    ragpilot update                 Re-index changed files\n\
                    ragpilot status                 Show index statistics\n\
+                   ragpilot paths                  Print where this project's data lives\n\
 \n\
                    ragpilot stats                  Show last context_bundle token savings\n\
                    ragpilot skeleton <file>        Print a token-efficient skeleton of a file\n\
@@ -404,6 +407,34 @@ async fn cmd_doctor() -> anyhow::Result<()> {
     println!("  Or register the server by hand in .mcp.json:");
     println!(r#"    {{"mcpServers":{{"ragpilot":{{"type":"stdio","command":"ragpilot","args":["--mcp-server"]}}}}}}"#);
 
+    Ok(())
+}
+
+/// Print where this project's data lives, as `key=value` lines.
+///
+/// Scripts (the benchmark among them) used to reach into `.rag/` directly.
+/// Now that the layout is resolved rather than fixed, they ask instead.
+fn cmd_paths() -> anyhow::Result<()> {
+    let root = std::env::current_dir()?;
+    let p = paths::ProjectPaths::resolve(&root);
+
+    println!("root={}", p.root().display());
+    println!("layout={}", if p.is_legacy() { "legacy" } else { "global" });
+    println!("id={}", p.id().unwrap_or(""));
+    println!("data_dir={}", p.data_dir().display());
+    println!("config={}", p.config().display());
+    println!("state={}", p.state().display());
+    println!("stores_db={}", p.stores_db().display());
+    println!("queries={}", p.queries().display());
+    println!("data_root={}", paths::data_root().display());
+    println!("registry={}", paths::registry_path().display());
+    println!("brain_dir={}", brain::dir().display());
+
+    // The collection needs the config; absent config, the id is what it will be.
+    let collection = config::Config::load(&p.config())
+        .map(|c| p.collection(c.qdrant.collection.as_deref(), &c.project.name))
+        .unwrap_or_else(|_| p.id().unwrap_or("").to_string());
+    println!("collection={collection}");
     Ok(())
 }
 

@@ -6,6 +6,99 @@ All notable changes to **ragpilot** are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-08-27
+
+The **second brain**: a persistent memory that belongs to you and your machine
+rather than to a repository. Markdown in a git repo — readable, greppable and
+revertible without RagPilot in the picture. The vector collection is a
+retrieval layer rebuilt from it, never the only copy of anything.
+
+### Added
+- **`ragpilot brain init`** — creates `<data_root>/brain/`
+  (`daily/ knowledge/ skills/ inbox/ archive/`), makes it a git repo with a
+  first commit, and writes `persona.md` and `config.toml`. An existing brain is
+  **upgraded, never wiped**: the schema version is bumped and every setting is
+  left as it was.
+- **Four MCP tools that work in any folder, project or not** — `brain_load`
+  (a token-budgeted opening package: persona, open threads, recent decisions),
+  `brain_search`, `brain_note` (searchable within a second) and `brain_flush`.
+- **Session hooks.** `SessionStart` / `SessionEnd` / `PreCompact` are installed
+  into `.claude/settings.local.json` for Claude Code, so context arrives and
+  the session is recorded without the agent choosing to cooperate. Clients
+  without lifecycle hooks get the same contract as a convention block in their
+  agent markdown.
+- **`ragpilot brain compile`** — distils changed logs and inbox drops into
+  knowledge notes with frontmatter and wikilinks, drafts `skills/` from repeated
+  procedures, and commits. It **never deletes**: conflicting information is
+  marked with a `> ⚠ Çelişki:` comment under the old claim. Output that does not
+  parse is skipped whole and reported — a chunk is never half-applied.
+- **`ragpilot brain import`** — ChatGPT exports, claude.ai exports, Claude Code
+  and Codex session logs, and plain markdown. Raw conversations are archived
+  verbatim; `--limit` and `--since` make a large archive tractable.
+- **`ragpilot brain doctor [--fix]`** — schema, engine, scheduler, wikilinks,
+  index drift, orphaned vectors and git state. `--fix` repairs only what is
+  derived from the markdown; a broken wikilink is reported with a suggestion and
+  left to you. `ragpilot doctor` summarises the brain too.
+- **`ragpilot brain schedule`** — a systemd user timer or a launchd agent for
+  the daily compile. Always explicit; nothing registers a background job on its
+  own.
+- **Two compiler engines behind one trait.** `claude-cli` runs on your existing
+  Claude subscription with no API key; `gemini-api` uses `GEMINI_API_KEY`, read
+  from the environment at call time and never written to a config file.
+  `--engine` overrides either for one run.
+- `rag_search` gained `scope: project | brain | both`; `context_bundle` gained an
+  opt-in `include_brain`. Both default to the previous behaviour.
+- **[docs/brain.md](docs/brain.md)** — a setup spec written to be handed to a
+  coding agent and executed.
+
+### Security
+- **Brain data can never reach a reporting path.** `brain_*` calls are excluded
+  from the observation seam before any observer is invoked — enforced in the
+  open source rather than promised by a separate build, and covered by a test.
+  See [SECURITY_MODEL §10](docs/SECURITY_MODEL.md).
+
+## [0.6.0] — 2026-08-27
+
+**A project folder now keeps nothing but its MCP config and agent markdown.**
+Everything RagPilot writes moves to one machine-global data root.
+
+### Added
+- **Global data layout** — `~/.local/share/ragpilot/` (override with
+  `RAGPILOT_DATA_DIR`) holding `registry.json` and `projects/<id>/`. A project
+  id is `<folder-slug>-<blake3 of its canonical path>`, which is also its Qdrant
+  collection name.
+- **`ragpilot migrate [--keep]`** — moves a `.rag/` project into the global
+  layout **without re-indexing**: the existing collection is aliased to the new
+  name, so search results are identical either side of it. `--keep` copies
+  rather than moves, leaving `.rag/` as a working fallback.
+- **`ragpilot projects list | rm <id> | relink <id> <path>`**. `rm` follows an
+  alias to the physical collection so a migrated project leaves nothing behind,
+  and never touches the project's own files.
+- **`ragpilot paths`** — prints the resolved locations for the current project,
+  so scripts stop guessing at `.rag/`.
+- **Layered configuration**: environment > project config > global config >
+  built-in defaults. Tables merge; arrays replace.
+
+### Changed
+- `ragpilot init <agent>` no longer creates `.rag/`. It registers the project,
+  writes the MCP config, and maintains a marked
+  `<!-- ragpilot:start -->` block in the agent markdown — created if absent,
+  replaced in place if present, appended below your own text otherwise, and
+  never duplicated.
+- Un-migrated indexes are protected: if the new collection is missing while the
+  old name still holds vectors, indexing stops and points at `migrate` rather
+  than quietly building an empty collection beside it.
+
+### Fixed
+- `ragpilot doctor` checked `.claude/settings.json` for the MCP registration,
+  which `init` has not written for some time — a correctly configured project
+  failed the check. It now looks at `.mcp.json`, with the old location as a
+  fallback.
+
+### Compatibility
+- Projects with a `.rag/` directory keep working for one minor release, with a
+  one-line migrate reminder on each command.
+
 ### Changed
 - **The crate is now a library as well as the `ragpilot` binary.** All CLI
   logic moved into the library (`ragpilot::run`); `main.rs` is a thin entry

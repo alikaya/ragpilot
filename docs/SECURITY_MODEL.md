@@ -46,7 +46,7 @@ called out clearly below.
                         │            │                                 │    embedding API
                         │        embeddings                           │    (only if enabled)
                         │            ▼                                 │
-                        │   Qdrant (vectors)   SQLite .rag/stores.db   │
+                        │   Qdrant (vectors)   SQLite stores.db        │
                         │   localhost:6334      (symbols/graph/tree)   │
                         │            │                  │              │
                         │            └───── tools ──────┘              │
@@ -97,10 +97,12 @@ observer.)
 | ragpilot → Qdrant | Vectors + chunk payloads | `localhost` by default |
 | ragpilot → Hugging Face | Model download request (first run only) | One-time; avoidable via pre-seeded cache (§4) |
 | MCP client → ragpilot | Tool calls (queries, file paths, symbols) | stdio; confined to project root (§5) |
+| ragpilot → compiler engine | **Brain material only**, and only when a brain exists (§9) | Your Claude subscription, or your own Gemini key |
+| ragpilot → observer (separate builds) | Project tool traffic. **Never brain traffic** (§10) | The open binary ships no observer |
 
 The two boundaries that can move data off the machine are **API embeddings**
 and a **remote Qdrant** — both are configuration choices, off by default, and
-visible in `.rag/config.toml`.
+visible in the project config (`ragpilot paths` prints where it lives).
 
 ---
 
@@ -183,7 +185,72 @@ For a privacy-sensitive or air-gapped deployment:
 
 ---
 
-## 9. Reporting a vulnerability
+## 9. The brain: what it holds and what leaves
+
+The second brain (`ragpilot brain`) is different in kind from a project index.
+A project index holds *derivatives* of code you already have. **The brain holds
+content you wrote**: decisions, session summaries, imported conversations,
+whatever you drop in the inbox. It is worth being precise about where it lives
+and what touches the network.
+
+### Where it lives
+
+Everything is plain markdown in a git repository under
+`<data_root>/brain/` — by default `~/.local/share/ragpilot/brain`. No database
+holds the only copy of anything: the vector collection `ragpilot_brain` is a
+retrieval layer, rebuilt from the markdown on demand. Delete it and nothing is
+lost; delete the markdown and it is gone. Derived files (`state.json`,
+`stores.db`, `.sessions.json`, `.compile.json`) are gitignored.
+
+### What crosses the network
+
+| Component | Egress | Default |
+|---|---|---|
+| Vault markdown | None — plain files on your disk | Always local |
+| `ragpilot_brain` collection | Your Qdrant | `localhost` unless you point it elsewhere |
+| Embeddings for brain search | Local ONNX model | Local; only leaves if you configure an API provider |
+| **Compiler** (`brain compile`, session summaries, `brain import`) | **The raw material being distilled** | `claude-cli`: your existing Claude subscription. `gemini-api`: `generativelanguage.googleapis.com` with your own key |
+
+The default install — local embeddings plus the `claude-cli` engine — sends
+nothing anywhere except through the Claude subscription you already have. There
+is no RagPilot server in the picture; there is nothing to opt out of.
+
+The compiler is the one component that reads brain content and sends it
+somewhere. It runs when you compile (manually or on the schedule you install),
+when a session ends with hooks installed, and during `brain import`. If that is
+not acceptable for some material, do not put that material in the vault — or
+set `compiler.schedule = ""` and compile deliberately.
+
+### Secrets
+
+`GEMINI_API_KEY` is read from the environment at call time and is **never**
+written to `brain/config.toml`. The file is designed to be committable; the key
+is not. The key travels in an HTTP header, never in a request body.
+
+---
+
+## 10. Brain data and enterprise reporting
+
+RagPilot has a separate commercial distribution that supplies a `ToolObserver`
+to report project usage. The line between the two is worth stating plainly,
+because they hold different kinds of thing:
+
+- **The brain holds content** — your notes, your decisions, your imported
+  conversations. It is your data, on your machine.
+- **The enterprise reporting layer holds no content** — counters, tool names,
+  file paths, timestamps. That is its whole design.
+
+**Brain data never enters any reporting path.** This is enforced in the open
+source, not promised by the closed one: `brain_*` tool calls are excluded from
+the observation seam before an observer is ever invoked
+(`mcp::tools::is_brain_request`, applied in `run_server_with`). An observer
+cannot see a `brain_note`, a `brain_load` package or a `brain_search` result,
+whatever it was built to do. The exclusion is covered by a test that fails if a
+new brain tool is added without being listed.
+
+---
+
+## 11. Reporting a vulnerability
 
 Please report security issues privately to **alikayaa@gmail.com** rather than
 opening a public issue. See [`SECURITY.md`](../SECURITY.md) for the disclosure
