@@ -53,6 +53,7 @@ stores.db
 index.lock
 .sessions.json
 .compile.json
+.missed-flush
 .staging/
 *.tmp
 ";
@@ -131,6 +132,32 @@ pub async fn cmd_init(engine_override: Option<&str>) -> Result<()> {
     //    quietly does nothing.
     let cfg = BrainConfig::load(&config_path())?;
     report_engine(&cfg, engine_override);
+
+    // 5b. Rules and threads. Created empty and never overwritten — by the
+    //     second run they hold the user's own corrections and open work.
+    for (path, body) in [
+        (vault::rules_path(), vault::rules_template(&now_date())),
+        (vault::threads_path(), vault::threads_template(&now_date())),
+    ] {
+        let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        if path.exists() {
+            println!("{} {name} (kept)", "i".blue());
+        } else {
+            std::fs::write(&path, body)?;
+            println!("{} {name}", "✓".green());
+        }
+    }
+
+    // An upgraded vault keeps its open work in the last session block. Carry it
+    // into the standing list, or the loader — which prefers that list once it
+    // holds anything — would quietly drop months of it.
+    if vault::active_threads().is_empty() {
+        let carried = vault::threads_from_dailies();
+        if !carried.is_empty() {
+            vault::update_threads(&carried, &[])?;
+            println!("{} threads.md seeded with {} open thread(s) from the log", "✓".green(), carried.len());
+        }
+    }
 
     // 6. First commit, so "revert the compile" has something to revert to.
     //    A vault whose history starts empty cannot be rolled back at all.

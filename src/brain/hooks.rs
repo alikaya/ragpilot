@@ -28,8 +28,13 @@ not tied to this repository.
   already decided.
 - The moment something is **decided or learned**, call `brain_note` with
   `kind: \"decision\"`. Do not wait for the end of the session.
+- When you are **corrected** — \"do not do it that way\", \"I want it like this\" —
+  call `brain_note` with `kind: \"rule\"` and a `why`. Rules load at the start of
+  every session, so the same correction never has to be made twice.
 - **Before the session ends**, call `brain_flush` with a summary, the decisions
-  made, and what is still open. You write the summary; the tool only stores it.
+  made, what is still open, and anything you **finished** in `closed_threads`.
+  Open work is carried across sessions until you close it, so close what is done
+  or it will follow you around.
 - If you notice a **previous session closed without a flush**, reconstruct what
   you can from the transcript or the repository, note it, and carry on — a gap
   in the log is worth filling late.

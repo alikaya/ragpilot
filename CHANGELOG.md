@@ -7,6 +7,21 @@ All notable changes to **ragpilot** are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Rules that accumulate.** `brain_note` with `kind: "rule"` records a
+  correction — and the reason for it — in `rules.md`, which loads at the start
+  of every session ahead of anything situational. A correction now only has to
+  be made once. Duplicates are ignored, so being told the same thing twice does
+  not produce two rules.
+- **Open work now survives sessions that never mention it.** `brain_load` read
+  only the *last* session's open-threads block, so a thread left alone for a few
+  days disappeared from the opening context. Threads live in `threads.md` until
+  `brain_flush` closes them; upgrading an existing vault seeds the list from
+  every session block in the log rather than losing what was there.
+- **A session that ends without being recorded now says so.** The hooks make the
+  write a mechanism rather than a discipline, but a mechanism can still fail —
+  no engine, no network, a model that answers nothing. Every failure path leaves
+  a marker; the next `brain session-start` surfaces it once and `brain doctor`
+  reports it.
 - **`ragpilot migrate --scan <dir>`** — a read-only inventory of every legacy
   `.rag/` project under a directory: where it is, what collection it uses, the
   id it will get, how much project-local data it holds, and whether it has been

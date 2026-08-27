@@ -66,12 +66,19 @@ The result is `~/.local/share/ragpilot/brain/`:
 ```
 config.toml     engine, model, schedule, budgets
 persona.md      yours to edit; the compiler reads it and never rewrites it
+rules.md        corrections you gave, with the reason for each
+threads.md      work that is open across sessions, until you close it
 daily/          session logs, one file per day
 knowledge/      compiled notes
 skills/         procedures worth repeating
 inbox/          drop anything here; the compiler digests it
 archive/        imported history
 ```
+
+`rules.md` is the one that compounds. Every time you correct the agent, it
+writes the correction down with its reason, and every session afterwards starts
+with it — so a thing you said once stays said. Add one directly with
+`brain_note` and `kind: "rule"`.
 
 It is a git repository from the first commit, so every later change is one
 `git revert` away.
@@ -132,6 +139,10 @@ index drift, orphaned vectors and git state. `--fix` repairs the derived ones
   not after five minutes.
 - **Note decisions as they happen**, not at the end: `brain_note` with
   `kind: "decision"`.
+- **Correct it out loud.** "Do not open with a paragraph", "read the file before
+  editing" — each correction becomes a rule that loads with every session.
+- **Close what you finish.** Open work follows you across sessions on purpose;
+  `brain_flush` takes a `closed_threads` list.
 - **Use the inbox.** Drop an invoice, a link dump, a half-written design doc
   into `inbox/` and the compiler will fold it in.
 - **Compile.** Nightly by default:
@@ -188,7 +199,7 @@ from the environment and is never written to `config.toml`.
 |---|---|
 | `brain_load` | The session-opening package: persona, open threads, recent decisions |
 | `brain_search` | Semantic search over the vault (`knowledge` \| `daily` \| `skills`) |
-| `brain_note` | Record one thing, searchable immediately |
+| `brain_note` | Record one thing, searchable immediately (`kind: "rule"` makes it a standing rule) |
 | `brain_flush` | Write the session block |
 
 These four work in any folder, project or not.

@@ -39,6 +39,33 @@ Rules:
 /// the configured daily budget.
 const TRANSCRIPT_SHARE: f64 = 0.25;
 
+/// Left behind when a session ends without its record reaching disk, and
+/// surfaced at the start of the next one.
+///
+/// The hooks make the write a mechanism rather than a discipline, but a
+/// mechanism can still fail — no compiler engine, no network, a model that
+/// answers nothing. Without a marker that failure is silent, and a day of work
+/// is simply gone.
+fn marker_path() -> PathBuf { super::dir().join(".missed-flush") }
+
+fn record_miss(reason: &str) {
+    let line = format!("{} — {reason}\n", chrono::Local::now().format("%Y-%m-%d %H:%M"));
+    let _ = std::fs::write(marker_path(), line);
+}
+
+fn clear_miss() {
+    let _ = std::fs::remove_file(marker_path());
+}
+
+/// The pending miss, if there is one. Reading it clears it: it is a nudge for
+/// the next session, not a permanent record.
+fn take_miss() -> Option<String> {
+    let text = std::fs::read_to_string(marker_path()).ok()?;
+    clear_miss();
+    let text = text.trim();
+    (!text.is_empty()).then(|| text.to_string())
+}
+
 // ── session-start ──────────────────────────────────────────────────────────
 
 /// Print the opening package. Stdout is the contract: Claude Code injects it,
@@ -51,6 +78,14 @@ pub fn cmd_session_start(max_tokens: Option<usize>) -> Result<()> {
     }
     let cfg = BrainConfig::load(&super::config_path())?;
     let budget = max_tokens.unwrap_or(cfg.load.max_tokens).max(1);
+
+    if let Some(miss) = take_miss() {
+        println!(
+            "## Unrecorded session\n\nThe previous session ended without its record reaching \
+             the brain ({miss}). If you can reconstruct what happened — from the repository, \
+             the transcript, or by asking — note it now with `brain_note`, then carry on.\n"
+        );
+    }
     print!("{}", vault::load_package(budget)?);
     Ok(())
 }
@@ -95,27 +130,26 @@ pub async fn cmd_session_end(
     let budget = (cfg.compiler.daily_token_budget as f64 * TRANSCRIPT_SHARE) as usize;
     let input = truncate_tokens(&text, budget.max(500));
 
-    let engine = engine::create(&cfg, engine_override)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-    engine
-        .available()
-        .map_err(|e| anyhow::anyhow!("Compiler engine '{}' unavailable: {e}", engine.name()))?;
+    // From here on every failure leaves a marker, so the next session knows the
+    // day was lost instead of assuming it was quiet.
+    let digest = match summarise(&cfg, engine_override, &input).await {
+        Ok(digest) => digest,
+        Err(e) => {
+            record_miss(&e.to_string());
+            return Err(e);
+        }
+    };
 
-    let raw = engine
-        .complete(CompileRequest {
-            system: SUMMARY_PROMPT,
-            input: &input,
-            max_output_tokens: 800,
-        })
-        .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-
-    let digest = Digest::parse(&raw);
-    if digest.summary.trim().is_empty() {
-        anyhow::bail!("The compiler produced no SUMMARY line — nothing written.");
-    }
-
-    let written = vault::append_flush(&digest.summary, &digest.decisions, &digest.open_threads)?;
+    let written = match vault::append_flush(&digest.summary, &digest.decisions, &digest.open_threads)
+        .and_then(|p| vault::update_threads(&digest.open_threads, &[]).map(|_| p))
+    {
+        Ok(p) => p,
+        Err(e) => {
+            record_miss(&format!("could not write the session block: {e}"));
+            return Err(e);
+        }
+    };
+    clear_miss();
     state.record(&path, total_lines);
     state.save();
 
@@ -132,6 +166,34 @@ pub async fn cmd_session_end(
         digest.open_threads.len()
     );
     Ok(())
+}
+
+/// One compiler call, turned into a digest. Split out so every failure on the
+/// way there is caught in one place.
+async fn summarise(
+    cfg: &BrainConfig,
+    engine_override: Option<&str>,
+    input: &str,
+) -> Result<Digest> {
+    let engine = engine::create(cfg, engine_override).map_err(|e| anyhow::anyhow!("{e}"))?;
+    engine
+        .available()
+        .map_err(|e| anyhow::anyhow!("compiler engine '{}' unavailable: {e}", engine.name()))?;
+
+    let raw = engine
+        .complete(CompileRequest {
+            system: SUMMARY_PROMPT,
+            input,
+            max_output_tokens: 800,
+        })
+        .await
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+
+    let digest = Digest::parse(&raw);
+    if digest.summary.trim().is_empty() {
+        anyhow::bail!("the compiler produced no SUMMARY line");
+    }
+    Ok(digest)
 }
 
 /// Hook payloads arrive as JSON on stdin; `transcript_path` is the field we

@@ -58,9 +58,13 @@ moment something is decided, not at the end of the session.",
                     "text": { "type": "string" },
                     "kind": {
                         "type": "string",
-                        "description": "note | decision | task | receipt (default: note)",
-                        "enum": ["note", "decision", "task", "receipt"],
+                        "description": "note | decision | task | receipt | rule (default: note). \"rule\" records a correction you were given as a standing rule — it goes to rules.md and is loaded at the start of every session, so the same correction is never needed twice.",
+                        "enum": ["note", "decision", "task", "receipt", "rule"],
                         "default": "note"
+                    },
+                    "why": {
+                        "type": "string",
+                        "description": "For kind \"rule\": the reason behind it. A rule without its reason gets misapplied."
                     }
                 },
                 "required": ["text"]
@@ -76,7 +80,8 @@ and the half-finished work separately is what makes the next brain_load useful."
                 "properties": {
                     "summary":      { "type": "string", "description": "What happened this session" },
                     "decisions":    { "type": "array", "items": { "type": "string" }, "description": "Decisions made" },
-                    "open_threads": { "type": "array", "items": { "type": "string" }, "description": "What is still half-done" }
+                    "open_threads": { "type": "array", "items": { "type": "string" }, "description": "What is still half-done. Kept in threads.md until closed, so it survives sessions that never mention it." },
+                    "closed_threads": { "type": "array", "items": { "type": "string" }, "description": "Open threads that are now finished" }
                 },
                 "required": ["summary"]
             }
@@ -216,9 +221,19 @@ async fn note(req: &McpRequest, args: &serde_json::Value) -> McpResponse {
     };
     let kind = args.get("kind").and_then(|v| v.as_str()).unwrap_or("note");
 
-    let path = match vault::append_note(kind, text) {
-        Ok(p) => p,
-        Err(e) => return McpResponse::tool_error(req.id.clone(), format!("brain_note error: {e}")),
+    // A rule is not an event in a log — it is a standing instruction, so it
+    // lives in its own file and is loaded at the start of every session.
+    let path = if kind == "rule" {
+        let why = args.get("why").and_then(|v| v.as_str());
+        match vault::append_rule(text, why) {
+            Ok(p) => p,
+            Err(e) => return McpResponse::tool_error(req.id.clone(), format!("brain_note error: {e}")),
+        }
+    } else {
+        match vault::append_note(kind, text) {
+            Ok(p) => p,
+            Err(e) => return McpResponse::tool_error(req.id.clone(), format!("brain_note error: {e}")),
+        }
     };
 
     let indexed = reindex(&path).await;
@@ -240,20 +255,25 @@ async fn flush(req: &McpRequest, args: &serde_json::Value) -> McpResponse {
     };
     let decisions = string_list(args.get("decisions"));
     let open_threads = string_list(args.get("open_threads"));
+    let closed_threads = string_list(args.get("closed_threads"));
 
     let path = match vault::append_flush(summary, &decisions, &open_threads) {
         Ok(p) => p,
         Err(e) => return McpResponse::tool_error(req.id.clone(), format!("brain_flush error: {e}")),
     };
+    if let Err(e) = vault::update_threads(&open_threads, &closed_threads) {
+        return McpResponse::tool_error(req.id.clone(), format!("brain_flush error: {e}"));
+    }
 
     let indexed = reindex(&path).await;
     McpResponse::tool_text(
         req.id.clone(),
         format!(
-            "Session written to {} ({} decision(s), {} open thread(s)){indexed}",
+            "Session written to {} ({} decision(s), {} open, {} closed){indexed}",
             relative(&path),
             decisions.len(),
-            open_threads.len()
+            open_threads.len(),
+            closed_threads.len()
         ),
     )
 }

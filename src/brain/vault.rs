@@ -7,7 +7,7 @@
 use anyhow::{Context, Result};
 use std::path::PathBuf;
 
-use super::{daily_dir, persona_path};
+use super::{daily_dir, dir, persona_path};
 use crate::tokens;
 
 /// Subsection headings written by every flush, so `brain_load` can find them
@@ -19,7 +19,40 @@ pub const OPEN_THREADS_HEADING: &str = "### Open threads";
 /// How far back `brain_load` looks for decisions.
 const RECENT_DAYS: usize = 7;
 /// Share of the load budget the persona may take before it is trimmed.
-const PERSONA_BUDGET_SHARE: f64 = 0.5;
+const PERSONA_BUDGET_SHARE: f64 = 0.4;
+/// Share reserved for rules. They are instructions, not background — trimming
+/// them away silently is how the same correction gets made twice.
+const RULES_BUDGET_SHARE: f64 = 0.3;
+
+/// Corrections the user has given, kept until they are edited out by hand.
+pub fn rules_path() -> PathBuf { dir().join("rules.md") }
+/// Work that is open across days, rather than only in the last session.
+pub fn threads_path() -> PathBuf { dir().join("threads.md") }
+
+const ACTIVE_HEADING: &str = "## Active";
+const CLOSED_HEADING: &str = "## Closed";
+
+/// Starting content for the two files `brain init` creates.
+pub fn rules_template(today: &str) -> String {
+    format!(
+        "---\ntitle: Rules\nupdated: {today}\n---\n\n\
+         # Rules\n\n\
+         Corrections you were given, and the reason behind each one. Every session\n\
+         starts with this file, so a correction only has to be made once.\n\n\
+         Add one with `brain_note` and `kind: \"rule\"`. Edit or delete freely — this\n\
+         file is yours; the compiler never rewrites it.\n"
+    )
+}
+
+pub fn threads_template(today: &str) -> String {
+    format!(
+        "---\ntitle: Threads\nupdated: {today}\n---\n\n\
+         # Threads\n\n\
+         Work that is still open, carried across sessions until it is closed.\n\
+         `brain_flush` adds and closes items here.\n\n\
+         {ACTIVE_HEADING}\n\n{CLOSED_HEADING}\n"
+    )
+}
 
 pub fn today() -> String {
     chrono::Local::now().format("%Y-%m-%d").to_string()
@@ -62,6 +95,158 @@ pub fn append_note(kind: &str, text: &str) -> Result<PathBuf> {
     append_today(&format!("- {} [{kind}] {line}\n", now_hhmm()))
 }
 
+/// Record a correction as a standing rule. Appended, never rewritten, and
+/// skipped when the same rule is already there — an agent told the same thing
+/// twice should not produce two rules.
+pub fn append_rule(rule: &str, reason: Option<&str>) -> Result<PathBuf> {
+    let path = rules_path();
+    let mut text = std::fs::read_to_string(&path)
+        .unwrap_or_else(|_| rules_template(&today()));
+
+    let rule = rule.trim().replace('\n', " ");
+    if text.contains(&rule) {
+        return Ok(path);
+    }
+    let entry = match reason.map(str::trim).filter(|r| !r.is_empty()) {
+        Some(why) => format!("\n- **rule:** {rule}\n  **why:** {}\n", why.replace('\n', " ")),
+        None => format!("\n- **rule:** {rule}\n"),
+    };
+    if !text.ends_with('\n') {
+        text.push('\n');
+    }
+    text.push_str(&entry);
+    std::fs::write(&path, text).with_context(|| format!("Cannot write {}", path.display()))?;
+    Ok(path)
+}
+
+// ── threads ────────────────────────────────────────────────────────────────
+
+/// Open new threads and close finished ones.
+///
+/// Open work survives until it is closed, rather than only until the next
+/// session writes a different list — a thread nobody mentioned for three days
+/// is exactly the one worth being reminded of.
+pub fn update_threads(open: &[String], closed: &[String]) -> Result<PathBuf> {
+    let path = threads_path();
+    let text = std::fs::read_to_string(&path).unwrap_or_else(|_| threads_template(&today()));
+    let (mut active, mut done) = split_threads(&text);
+    let today = today();
+
+    for item in closed {
+        let item = item.trim();
+        if item.is_empty() {
+            continue;
+        }
+        // Closing something matches loosely: the agent rarely quotes its own
+        // earlier wording exactly.
+        let hit = active.iter().position(|a| similar(a, item));
+        let line = match hit {
+            Some(i) => active.remove(i),
+            None => item.to_string(),
+        };
+        let line = strip_opened(&line);
+        if !done.iter().any(|d| similar(d, &line)) {
+            done.push(format!("{line} (closed {today})"));
+        }
+    }
+
+    for item in open {
+        let item = item.trim();
+        if item.is_empty() || active.iter().any(|a| similar(a, item)) {
+            continue;
+        }
+        active.push(format!("{item} (opened {today})"));
+    }
+
+    let out = format!(
+        "---\ntitle: Threads\nupdated: {today}\n---\n\n# Threads\n\n\
+         Work that is still open, carried across sessions until it is closed.\n\
+         `brain_flush` adds and closes items here.\n\n\
+         {ACTIVE_HEADING}\n\n{}\n\n{CLOSED_HEADING}\n\n{}\n",
+        render_threads(&active),
+        render_threads(&done),
+    );
+    std::fs::write(&path, out).with_context(|| format!("Cannot write {}", path.display()))?;
+    Ok(path)
+}
+
+fn render_threads(items: &[String]) -> String {
+    if items.is_empty() {
+        "—".to_string()
+    } else {
+        items.iter().map(|i| format!("- {i}")).collect::<Vec<_>>().join("\n")
+    }
+}
+
+fn split_threads(text: &str) -> (Vec<String>, Vec<String>) {
+    let body = |heading: &str| -> Vec<String> {
+        last_section_body(text, heading)
+            .map(|b| {
+                b.lines()
+                    .map(|l| l.trim())
+                    .filter(|l| l.starts_with("- ") && *l != "- —")
+                    .map(|l| l.trim_start_matches("- ").trim().to_string())
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    (body(ACTIVE_HEADING), body(CLOSED_HEADING))
+}
+
+fn strip_opened(line: &str) -> String {
+    match line.rfind(" (opened ") {
+        Some(i) if line.ends_with(')') => line[..i].to_string(),
+        _ => line.to_string(),
+    }
+}
+
+/// Loose match: same text ignoring case, punctuation and the trailing stamp.
+fn similar(a: &str, b: &str) -> bool {
+    let norm = |s: &str| -> String {
+        strip_opened(s)
+            .to_lowercase()
+            .chars()
+            .filter(|c| c.is_alphanumeric() || c.is_whitespace())
+            .collect::<String>()
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    let (a, b) = (norm(a), norm(b));
+    !a.is_empty() && (a == b || a.contains(&b) || b.contains(&a))
+}
+
+/// Open threads recorded in the dailies but not yet in `threads.md`.
+///
+/// An upgraded vault has months of open work living only in its last session
+/// block. Creating an empty `threads.md` beside it would drop all of it, since
+/// the loader prefers the standing list once it has anything in it.
+pub fn threads_from_dailies() -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for (_, text) in recent_dailies(RECENT_DAYS) {
+        for body in section_bodies(&text, OPEN_THREADS_HEADING) {
+            for line in body.lines() {
+                let line = line.trim();
+                if !line.starts_with("- ") || line == "- —" {
+                    continue;
+                }
+                let item = line.trim_start_matches("- ").trim().to_string();
+                if !out.iter().any(|existing| similar(existing, &item)) {
+                    out.push(item);
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Active threads, as the loader wants them.
+pub fn active_threads() -> Vec<String> {
+    std::fs::read_to_string(threads_path())
+        .map(|t| split_threads(&t).0)
+        .unwrap_or_default()
+}
+
 /// A session block. The headings are always written — an empty section is a
 /// dash, never a missing heading — because `brain_load` reads them back.
 pub fn append_flush(summary: &str, decisions: &[String], open_threads: &[String]) -> Result<PathBuf> {
@@ -95,12 +280,31 @@ fn bullets(items: &[String]) -> String {
 /// silently — a truncated section says so.
 pub fn load_package(max_tokens: usize) -> Result<String> {
     let persona = std::fs::read_to_string(persona_path()).unwrap_or_default();
-    Ok(assemble(&persona, &recent_dailies(RECENT_DAYS), max_tokens))
+    let rules = std::fs::read_to_string(rules_path()).unwrap_or_default();
+    let dailies = recent_dailies(RECENT_DAYS);
+
+    // Threads first from the standing list; a vault that predates it falls back
+    // to the last session's block so nothing is lost on upgrade.
+    let threads = match active_threads() {
+        items if !items.is_empty() => Some((
+            "still open".to_string(),
+            items.iter().map(|i| format!("- {i}")).collect::<Vec<_>>().join("\n"),
+        )),
+        _ => latest_section(&dailies, OPEN_THREADS_HEADING).map(|(d, b)| (format!("from {d}"), b)),
+    };
+
+    Ok(assemble(&persona, &rules, threads.as_ref(), &recent_decisions(&dailies), max_tokens))
 }
 
 /// The pure core of [`load_package`]: everything it needs is passed in, so the
 /// budget guarantee can be tested without a vault on disk.
-fn assemble(persona: &str, dailies: &[(String, String)], max_tokens: usize) -> String {
+fn assemble(
+    persona: &str,
+    rules: &str,
+    threads: Option<&(String, String)>,
+    decisions: &[String],
+    max_tokens: usize,
+) -> String {
     let mut out = String::new();
     let mut spent = 0usize;
 
@@ -117,10 +321,28 @@ fn assemble(persona: &str, dailies: &[(String, String)], max_tokens: usize) -> S
         }
     }
 
-    if let Some((date, threads)) = latest_section(dailies, OPEN_THREADS_HEADING) {
-        let header = format!("## Open threads (from {date})\n\n");
+    // Rules come before anything situational: they are how the agent is asked
+    // to behave, not background it may skim.
+    {
+        let body = rules_entries(rules);
+        if !body.is_empty() {
+            let header = "## Rules\n\n".to_string();
+            let budget = ((max_tokens as f64 * RULES_BUDGET_SHARE) as usize)
+                .min(max_tokens.saturating_sub(spent + tokens::estimate(&header)));
+            let body = fit(&body, budget);
+            if !body.is_empty() {
+                spent += tokens::estimate(&header) + tokens::estimate(&body);
+                out.push_str(&header);
+                out.push_str(&body);
+                out.push_str("\n\n");
+            }
+        }
+    }
+
+    if let Some((source, threads)) = threads {
+        let header = format!("## Open threads ({source})\n\n");
         let budget = max_tokens.saturating_sub(spent + tokens::estimate(&header));
-        let body = fit(&threads, budget);
+        let body = fit(threads, budget);
         if !body.is_empty() {
             spent += tokens::estimate(&header) + tokens::estimate(&body);
             out.push_str(&header);
@@ -129,7 +351,6 @@ fn assemble(persona: &str, dailies: &[(String, String)], max_tokens: usize) -> S
         }
     }
 
-    let decisions = recent_decisions(dailies);
     if !decisions.is_empty() {
         let header = "## Recent decisions\n\n".to_string();
         let budget = max_tokens.saturating_sub(spent + tokens::estimate(&header));
@@ -144,7 +365,7 @@ fn assemble(persona: &str, dailies: &[(String, String)], max_tokens: usize) -> S
     if out.trim().is_empty() {
         // Say which kind of nothing this is: a fresh brain and a budget too
         // small to hold anything are very different problems.
-        let note = if persona.trim().is_empty() && dailies.is_empty() {
+        let note = if persona.trim().is_empty() && decisions.is_empty() && threads.is_none() {
             "The brain is empty — nothing recorded yet."
         } else {
             "The token budget was too small to include anything from the brain."
@@ -152,6 +373,17 @@ fn assemble(persona: &str, dailies: &[(String, String)], max_tokens: usize) -> S
         return fit(note, max_tokens);
     }
     out.trim_end().to_string() + "\n"
+}
+
+/// Just the rule bullets from `rules.md` — the heading and the how-to prose
+/// around them are for a human reading the file, not for the context window.
+fn rules_entries(text: &str) -> String {
+    let kept: Vec<&str> = text
+        .lines()
+        .map(str::trim_end)
+        .filter(|l| l.trim_start().starts_with("- **rule:**") || l.trim_start().starts_with("**why:**"))
+        .collect();
+    kept.join("\n")
 }
 
 /// Daily files, newest first, at most `count` of them.
@@ -190,6 +422,21 @@ fn latest_section(dailies: &[(String, String)], heading: &str) -> Option<(String
         }
     }
     None
+}
+
+/// Bodies of *every* `heading` block in a file. Seeding an upgraded vault has
+/// to see all of a day's sessions, not just the last one.
+fn section_bodies(text: &str, heading: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut from = 0usize;
+    while let Some(rel) = text[from..].find(heading) {
+        let start = from + rel + heading.len();
+        let rest = &text[start..];
+        let end = rest.find("\n#").map(|i| i + 1).unwrap_or(rest.len());
+        out.push(rest[..end].trim().to_string());
+        from = start + end;
+    }
+    out
 }
 
 /// Body of the *last* `heading` block in a file, up to the next heading.
@@ -384,8 +631,15 @@ Wrote the paths module.
         );
         let dailies = vec![("2026-08-27".to_string(), daily)];
 
+        let threads = ("still open".to_string(), (0..80).map(|i| format!("- open thread {i}")).collect::<Vec<_>>().join("\n"));
+        let rules = (0..40)
+            .map(|i| format!("- **rule:** rule number {i}\n  **why:** because {i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let decisions = recent_decisions(&dailies);
+
         for budget in [1, 10, 50, 200, 1000, 4000] {
-            let out = assemble(&persona, &dailies, budget);
+            let out = assemble(&persona, &rules, Some(&threads), &decisions, budget);
             assert!(
                 tokens::estimate(&out) <= budget,
                 "budget {budget} exceeded: {} tokens",
@@ -397,9 +651,21 @@ Wrote the paths module.
     #[test]
     fn the_load_package_carries_all_three_sections_when_there_is_room() {
         let dailies = vec![("2026-08-27".to_string(), DAILY.to_string())];
-        let out = assemble("# Pilot\n\ndirect, concise", &dailies, 4000);
+        let threads = latest_section(&dailies, OPEN_THREADS_HEADING)
+            .map(|(d, b)| (format!("from {d}"), b))
+            .unwrap();
+        let rules = "- **rule:** answer first, warm up never\n  **why:** Ali says so";
+        let out = assemble(
+            "# Pilot\n\ndirect, concise",
+            rules,
+            Some(&threads),
+            &recent_decisions(&dailies),
+            4000,
+        );
 
         assert!(out.contains("Pilot"), "persona missing");
+        assert!(out.contains("## Rules"), "rules missing");
+        assert!(out.contains("answer first"), "rule text missing");
         assert!(out.contains("Open threads (from 2026-08-27)"), "open threads missing");
         assert!(out.contains("Recent decisions"), "decisions missing");
         assert!(out.contains("--keep"), "thread content missing");
@@ -410,7 +676,7 @@ Wrote the paths module.
 
     #[test]
     fn an_empty_brain_says_so_instead_of_returning_nothing() {
-        let out = assemble("", &[], 1000);
+        let out = assemble("", "", None, &[], 1000);
         assert!(out.contains("empty"), "{out}");
     }
 
@@ -419,5 +685,85 @@ Wrote the paths module.
         assert_eq!(bullets(&[]), "—");
         assert_eq!(bullets(&["  ".to_string()]), "—");
         assert_eq!(bullets(&["a".to_string(), "b".to_string()]), "- a\n- b");
+    }
+}
+
+#[cfg(test)]
+mod rules_and_threads_tests {
+    use super::*;
+
+    #[test]
+    fn only_the_rule_bullets_reach_the_context_window() {
+        let file = format!(
+            "{}\n- **rule:** answer first\n  **why:** no warm-up paragraphs\n- **rule:** read before writing\n",
+            rules_template("2026-08-27")
+        );
+        let entries = rules_entries(&file);
+
+        assert!(entries.contains("answer first"));
+        assert!(entries.contains("no warm-up"));
+        assert!(entries.contains("read before writing"));
+        // The prose that explains the file to a human is not context.
+        assert!(!entries.contains("Corrections you were given"));
+        assert!(!entries.contains("# Rules"));
+        assert!(!entries.contains("title: Rules"));
+
+        assert_eq!(rules_entries(&rules_template("2026-08-27")), "");
+    }
+
+    #[test]
+    fn threads_split_into_active_and_closed() {
+        let text = format!(
+            "# Threads\n\n{ACTIVE_HEADING}\n\n- one (opened 2026-08-01)\n- two\n\n{CLOSED_HEADING}\n\n- three (closed 2026-08-02)\n"
+        );
+        let (active, closed) = split_threads(&text);
+        assert_eq!(active, vec!["one (opened 2026-08-01)", "two"]);
+        assert_eq!(closed, vec!["three (closed 2026-08-02)"]);
+
+        // The dash placeholder is not a thread.
+        let empty = format!("{ACTIVE_HEADING}\n\n—\n\n{CLOSED_HEADING}\n\n—\n");
+        assert_eq!(split_threads(&empty), (vec![], vec![]));
+    }
+
+    #[test]
+    fn similar_matches_loosely_but_not_wildly() {
+        assert!(similar("migrate needs a --keep flag", "Migrate needs a --keep flag."));
+        assert!(similar("doctor should check the scheduler (opened 2026-08-01)", "doctor should check the scheduler"));
+        // A substring is close enough — the agent rarely quotes itself exactly.
+        assert!(similar("finish the migration docs", "migration docs"));
+        // Unrelated work is not.
+        assert!(!similar("write the release notes", "fix the parser"));
+        assert!(!similar("", "anything"));
+    }
+
+    #[test]
+    fn strip_opened_removes_only_a_trailing_stamp() {
+        assert_eq!(strip_opened("a thing (opened 2026-08-01)"), "a thing");
+        assert_eq!(strip_opened("a thing"), "a thing");
+        // Not a stamp: left alone.
+        assert_eq!(strip_opened("a thing (opened by hand) and more"), "a thing (opened by hand) and more");
+    }
+}
+
+#[cfg(test)]
+mod seeding_tests {
+    use super::*;
+
+    #[test]
+    fn seeding_sees_every_session_block_not_just_the_last() {
+        let day = format!(
+            "# 2026-08-27\n\n## Session 10:00\n\nfirst\n\n{OPEN_THREADS_HEADING}\n\n- alpha\n- beta\n\n\
+             ## Session 18:00\n\nsecond\n\n{OPEN_THREADS_HEADING}\n\n- gamma\n"
+        );
+        let bodies = section_bodies(&day, OPEN_THREADS_HEADING);
+        assert_eq!(bodies.len(), 2, "only one block was seen");
+        assert!(bodies[0].contains("alpha") && bodies[0].contains("beta"));
+        assert!(bodies[1].contains("gamma"));
+        // …and a block never runs into the next heading.
+        assert!(!bodies[0].contains("gamma"));
+
+        // The loader's own fallback still wants the newest block only.
+        let latest = last_section_body(&day, OPEN_THREADS_HEADING).unwrap();
+        assert!(latest.contains("gamma") && !latest.contains("alpha"));
     }
 }

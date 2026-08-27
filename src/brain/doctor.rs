@@ -63,6 +63,7 @@ pub async fn checks(fix: bool) -> Vec<Finding> {
     out.push(schema_check());
     out.push(engine_check());
     out.push(schedule_check());
+    out.push(flush_check());
     out.push(wikilink_check());
     out.push(index_check(fix).await);
     out.push(orphan_check(fix).await);
@@ -118,6 +119,42 @@ fn schedule_check() -> Finding {
             format!("Scheduler not installed (configured for {configured})"),
             "Install with `ragpilot brain schedule --install`.",
         )
+    }
+}
+
+/// Did the last session's record actually reach disk?
+///
+/// The hooks make it a mechanism, but a mechanism can fail quietly — no engine,
+/// no network, a model that answers nothing. The marker turns "the day was
+/// lost" into something the user is told rather than something they discover
+/// months later.
+fn flush_check() -> Finding {
+    let marker = super::dir().join(".missed-flush");
+    if let Ok(text) = std::fs::read_to_string(&marker) {
+        let text = text.trim();
+        if !text.is_empty() {
+            return Finding::bad(
+                "A session ended without being recorded",
+                format!("{text}\nThe next `brain session-start` will surface this once."),
+            );
+        }
+    }
+
+    // Nothing pending. Say how fresh the record is, so a brain that quietly
+    // stopped being written to is visible.
+    let latest = std::fs::read_dir(super::daily_dir())
+        .map(|entries| {
+            entries
+                .flatten()
+                .filter_map(|e| e.path().file_stem().map(|s| s.to_string_lossy().to_string()))
+                .max()
+        })
+        .ok()
+        .flatten();
+
+    match latest {
+        Some(day) => Finding::ok(format!("Sessions recorded (latest {day})")),
+        None => Finding::ok("No sessions recorded yet"),
     }
 }
 
