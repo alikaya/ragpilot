@@ -47,8 +47,47 @@ impl QdrantStore {
         self
     }
 
-    async fn exists(&self, name: &str) -> bool {
+    pub(crate) async fn exists(&self, name: &str) -> bool {
         self.client.collection_info(name).await.is_ok()
+    }
+
+    /// Point `alias` at `collection` — how `migrate` renames an index without
+    /// re-embedding a single chunk.
+    pub(crate) async fn create_alias_for(&self, collection: &str, alias: &str) -> Result<()> {
+        use qdrant_client::qdrant::CreateAliasBuilder;
+        self.client
+            .create_alias(CreateAliasBuilder::new(collection, alias))
+            .await
+            .map_err(|e| anyhow!("Cannot alias '{alias}' → '{collection}': {e}"))?;
+        Ok(())
+    }
+
+    /// The physical collection behind `name`, if `name` is an alias.
+    pub(crate) async fn alias_target(&self, name: &str) -> Option<String> {
+        let aliases = self.client.list_aliases().await.ok()?;
+        aliases
+            .aliases
+            .into_iter()
+            .find(|a| a.alias_name == name)
+            .map(|a| a.collection_name)
+    }
+
+    pub(crate) async fn drop_alias(&self, alias: &str) -> Result<()> {
+        self.client
+            .delete_alias(alias.to_string())
+            .await
+            .map_err(|e| anyhow!("Cannot drop alias '{alias}': {e}"))?;
+        Ok(())
+    }
+
+    /// Delete a collection by name — `projects rm` needs this for the physical
+    /// collection behind an alias, which is not `self.collection`.
+    pub(crate) async fn delete_named(&self, name: &str) -> Result<()> {
+        self.client
+            .delete_collection(name)
+            .await
+            .map_err(|e| anyhow!("Cannot delete collection '{name}': {e}"))?;
+        Ok(())
     }
 
     fn payload_to_chunk(payload: &std::collections::HashMap<String, qdrant_client::qdrant::Value>) -> Chunk {

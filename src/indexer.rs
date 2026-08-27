@@ -622,6 +622,7 @@ pub async fn cmd_init(force: bool) -> Result<()> {
     // Register the project (idempotent) so the MCP server can find it by
     // folder afterwards. A legacy `.rag/` project is left as it is.
     let paths = crate::paths::register_project(&root)?;
+    crate::paths::nudge_if_legacy(&paths);
     let config_path = paths.config();
 
     // Only generate config when it's missing. `--force` drives a full
@@ -653,6 +654,7 @@ pub async fn cmd_init(force: bool) -> Result<()> {
 
     let orch = build_orchestrator(&root, &config)?;
     let result = orch.ensure_index_with_progress(force).await?;
+    crate::paths::stamp_indexed(&paths);
 
     println!(
         "{} Done — {} files indexed ({} dirty), {}ms.",
@@ -664,7 +666,9 @@ pub async fn cmd_init(force: bool) -> Result<()> {
 /// Load the project config, distinguishing "file missing" (run init) from
 /// "file present but invalid" (show the real parse/validation error).
 fn load_config_or_explain(root: &Path) -> Result<Config> {
-    let path = Config::config_path(root);
+    let paths = crate::paths::ProjectPaths::resolve(root);
+    crate::paths::nudge_if_legacy(&paths);
+    let path = paths.config();
     if !path.exists() {
         anyhow::bail!("No config found at {}. Run 'ragpilot init' first.", path.display());
     }
@@ -683,6 +687,7 @@ pub async fn cmd_update() -> Result<()> {
 
     let orch = build_orchestrator(&root, &config)?;
     let result = orch.ensure_index_with_progress(false).await?;
+    crate::paths::stamp_indexed(&crate::paths::ProjectPaths::resolve(&root));
 
     if result.dirty_count == 0 {
         println!("{} Already up to date — no changes detected.", "✓".green());

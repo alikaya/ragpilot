@@ -11,6 +11,7 @@ mod agents;
 mod config;
 mod embedder;
 mod indexer;
+mod migrate;
 mod orchestrator;
 mod parser;
 mod paths;
@@ -77,6 +78,13 @@ async fn dispatch(observer: Option<Arc<dyn ToolObserver>>) -> anyhow::Result<()>
 
         Some("setup") => cmd_setup(&args).await,
 
+        Some("migrate") => {
+            let keep = args.iter().any(|a| a == "--keep");
+            let yes = args.iter().any(|a| a == "--yes" || a == "-y");
+            migrate::cmd_migrate(keep, yes).await
+        }
+        Some("projects") => migrate::cmd_projects(&args).await,
+
         Some("hooks") => cmd_hooks().await,
         Some("doctor") => cmd_doctor().await,
 
@@ -91,6 +99,10 @@ async fn dispatch(observer: Option<Arc<dyn ToolObserver>>) -> anyhow::Result<()>
                                                      agents: claude codex cursor vscode opencode windsurf antigravity all\n\
                    ragpilot init [--force]            Index current project\n\
                    ragpilot setup <folder> <agent>    Alias for 'ragpilot init <folder> <agent>'\n\
+                   ragpilot migrate [--keep] [-y]  Move .rag/ into the global data dir\n\
+                   ragpilot projects list          List registered projects\n\
+                   ragpilot projects rm <id>       Unregister + delete its data and collection\n\
+                   ragpilot projects relink <id> <path>  Point a project at its new folder\n\
                    ragpilot update                 Re-index changed files\n\
                    ragpilot status                 Show index statistics\n\
 \n\
@@ -215,9 +227,11 @@ async fn cmd_doctor() -> anyhow::Result<()> {
     use colored::Colorize;
 
     let root = std::env::current_dir()?;
-    let config_path = config::Config::config_path(&root);
-    let state_path = config::Config::state_path(&root);
-    let stores_path = config::Config::stores_db(&root);
+    let project_paths = paths::ProjectPaths::resolve(&root);
+    paths::nudge_if_legacy(&project_paths);
+    let config_path = project_paths.config();
+    let state_path = project_paths.state();
+    let stores_path = project_paths.stores_db();
 
     println!("{}", "─── ragpilot doctor ────────────────────────────".bold());
 

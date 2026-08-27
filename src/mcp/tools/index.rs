@@ -82,7 +82,9 @@ pub async fn ensure(req: &McpRequest, args: &serde_json::Value, ctx: &McpContext
 
     tracing::info!("rag_ensure_index: force={}", force);
 
-    match ctx.orchestrator.ensure_index(force).await {
+    let result = ctx.orchestrator.ensure_index(force).await;
+    crate::paths::stamp_indexed(&crate::paths::ProjectPaths::resolve(&ctx.root));
+    match result {
         Ok(r) => {
             let result = json!({
                 "dirty_count": r.dirty_count,

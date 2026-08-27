@@ -550,6 +550,37 @@ fn load_registry_lenient() -> Registry {
     }
 }
 
+/// Stamp "last indexed" on a registered project, so `projects list` reports
+/// something truthful. Best-effort: a failure here must never fail an index run
+/// that already succeeded.
+pub fn stamp_indexed(paths: &ProjectPaths) {
+    if paths.is_legacy() {
+        return;
+    }
+    let Ok(mut registry) = Registry::load() else { return };
+    registry.touch_indexed(paths.root());
+    let _ = registry.save();
+}
+
+/// Print the one-line migrate nudge for a project still on the legacy layout.
+///
+/// Once per process, so a command that resolves paths several times says it
+/// once — and a project on the global layout never says it at all.
+pub fn nudge_if_legacy(paths: &ProjectPaths) {
+    if !paths.is_legacy() {
+        return;
+    }
+    static NUDGED: std::sync::OnceLock<()> = std::sync::OnceLock::new();
+    if NUDGED.set(()).is_ok() {
+        eprintln!(
+            "ragpilot: this project still stores its index in {} — run `ragpilot migrate` \
+             to move it under {}.",
+            legacy_dir(paths.root()).display(),
+            data_root().display()
+        );
+    }
+}
+
 /// Canonicalize a folder, record it in the registry and create its data
 /// directory. Idempotent — re-running `init` neither changes the id nor
 /// rewrites `created`.
