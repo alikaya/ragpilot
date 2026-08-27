@@ -6,6 +6,14 @@ All notable changes to **ragpilot** are documented here. The format is based on
 
 ## [Unreleased]
 
+### Fixed
+- **The compiler can no longer invent a wikilink.** It was handed the index of
+  existing notes and still linked to slugs that were not in it, leaving dangling
+  links for the user to clean up. Links are now filtered at write time against
+  the notes that exist plus the ones being written in the same run — a rule the
+  model cannot argue with. A hand-written dangling link is still reported, which
+  is what that check is for.
+
 ### Added
 - **Rules that accumulate.** `brain_note` with `kind: "rule"` records a
   correction — and the reason for it — in `rules.md`, which loads at the start

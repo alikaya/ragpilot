@@ -300,6 +300,23 @@ fn chunk(sources: &[Source], chunk_budget: usize, total_budget: usize) -> Vec<Ch
     chunks
 }
 
+/// Slugs that exist as notes right now, for filtering the model's links.
+fn existing_slugs() -> std::collections::BTreeSet<String> {
+    let mut out = std::collections::BTreeSet::new();
+    for dir in [knowledge_dir(), skills_dir()] {
+        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().is_some_and(|e| e == "md") {
+                if let Some(stem) = path.file_stem() {
+                    out.insert(stem.to_string_lossy().to_string());
+                }
+            }
+        }
+    }
+    out
+}
+
 /// The slugs already in the brain, with their titles.
 ///
 /// Without this the model cannot reuse a slug (so every run would create a new
@@ -475,8 +492,15 @@ fn slugify(raw: &str) -> String {
 /// copied in first and **appended to** — a note is never rewritten from
 /// scratch, so nothing the user or an earlier compile wrote can be lost.
 fn apply(output: &Output, staging: &Path, report: &mut CompileReport) -> Result<()> {
+    // A link may point at a note that already exists, or at one this run is
+    // about to write. Anything else is the model guessing at a name, and a
+    // guess that ships is a broken link the user has to clean up by hand.
+    let mut known = existing_slugs();
+    known.extend(output.notes.iter().map(|n| n.slug.clone()));
+    known.extend(output.skills.iter().map(|n| n.slug.clone()));
+
     for note in &output.notes {
-        let created = stage_note(staging, &knowledge_dir(), note, "knowledge")?;
+        let created = stage_note(staging, &knowledge_dir(), note, "knowledge", &known)?;
         if created {
             report.notes_created.push(note.slug.clone());
         } else {
@@ -484,7 +508,7 @@ fn apply(output: &Output, staging: &Path, report: &mut CompileReport) -> Result<
         }
     }
     for skill in &output.skills {
-        stage_note(staging, &skills_dir(), skill, "skills")?;
+        stage_note(staging, &skills_dir(), skill, "skills", &known)?;
         report.skills.push(skill.slug.clone());
     }
     for (slug, what) in &output.contradictions {
@@ -495,7 +519,13 @@ fn apply(output: &Output, staging: &Path, report: &mut CompileReport) -> Result<
 }
 
 /// Returns whether the note is new.
-fn stage_note(staging: &Path, real_dir: &Path, note: &Note, area: &str) -> Result<bool> {
+fn stage_note(
+    staging: &Path,
+    real_dir: &Path,
+    note: &Note,
+    area: &str,
+    known: &std::collections::BTreeSet<String>,
+) -> Result<bool> {
     let file = format!("{}.md", note.slug);
     let live = real_dir.join(&file);
     let staged = staging.join(area).join(&file);
@@ -525,6 +555,7 @@ fn stage_note(staging: &Path, real_dir: &Path, note: &Note, area: &str) -> Resul
         let links: Vec<String> = note
             .links
             .iter()
+            .filter(|l| known.contains(*l))
             .filter(|l| !text.contains(&format!("[[{l}]]")))
             .map(|l| format!("[[{l}]]"))
             .collect();
@@ -834,5 +865,81 @@ CONTRADICTS: markdown-source-of-truth | the new material claims Qdrant is author
         // …and the sources that never made it are simply not attributed.
         let carried: usize = capped.iter().map(|c| c.sources.len()).sum();
         assert!(carried < sources.len(), "budget cap attributed every source");
+    }
+}
+
+#[cfg(test)]
+mod link_tests {
+    use super::*;
+    use std::collections::BTreeSet;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    fn scratch(label: &str) -> PathBuf {
+        static N: AtomicUsize = AtomicUsize::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "ragpilot-links-{}-{}-{}",
+            std::process::id(),
+            N.fetch_add(1, Ordering::SeqCst),
+            label
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn only_links_to_notes_that_exist_are_written() {
+        let dir = scratch("filter");
+        let real = dir.join("knowledge");
+        std::fs::create_dir_all(&real).unwrap();
+        std::fs::write(real.join("already-here.md"), "# Already Here\n").unwrap();
+
+        let note = Note {
+            slug: "new-note".into(),
+            tags: vec!["a".into()],
+            links: vec![
+                "already-here".into(),   // exists
+                "written-this-run".into(), // being created alongside
+                "invented-by-the-model".into(), // neither
+            ],
+            body: "Something worth keeping.".into(),
+        };
+
+        let known: BTreeSet<String> = ["already-here", "written-this-run", "new-note"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+
+        let staging = dir.join(".staging");
+        stage_note(&staging, &real, &note, "knowledge", &known).unwrap();
+        let text = std::fs::read_to_string(staging.join("knowledge").join("new-note.md")).unwrap();
+
+        assert!(text.contains("[[already-here]]"));
+        assert!(text.contains("[[written-this-run]]"));
+        // The one the model made up never reaches the vault.
+        assert!(!text.contains("invented-by-the-model"), "{text}");
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_note_with_no_resolvable_links_gets_no_related_line() {
+        let dir = scratch("none");
+        let real = dir.join("knowledge");
+        std::fs::create_dir_all(&real).unwrap();
+
+        let note = Note {
+            slug: "lonely".into(),
+            tags: vec![],
+            links: vec!["nothing-real".into()],
+            body: "Body.".into(),
+        };
+        let staging = dir.join(".staging");
+        stage_note(&staging, &real, &note, "knowledge", &BTreeSet::new()).unwrap();
+
+        let text = std::fs::read_to_string(staging.join("knowledge").join("lonely.md")).unwrap();
+        assert!(!text.contains("Related:"), "an empty Related line was written: {text}");
+
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }
