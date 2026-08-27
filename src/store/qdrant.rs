@@ -17,6 +17,10 @@ use super::{Chunk, CollectionInfo, ScoredChunk, SearchFilters, VectorStore};
 pub struct QdrantStore {
     client: Qdrant,
     collection: String,
+    /// Name this project's collection had before the global layout. When the
+    /// new collection is missing but this one exists, the index has not been
+    /// migrated yet — see [`ensure_collection`](VectorStore::ensure_collection).
+    legacy_guard: Option<String>,
 }
 
 impl QdrantStore {
@@ -30,7 +34,21 @@ impl QdrantStore {
         let collection = config.collection
             .clone()
             .unwrap_or_else(|| "rag_default".to_string());
-        Ok(Self { client, collection })
+        Ok(Self { client, collection, legacy_guard: None })
+    }
+
+    /// Refuse to create the collection while an un-migrated one of the old name
+    /// still holds this project's vectors. Without the guard `init` would
+    /// happily build a second, empty collection beside a perfectly good index.
+    pub fn with_legacy_guard(mut self, legacy_name: String) -> Self {
+        if legacy_name != self.collection {
+            self.legacy_guard = Some(legacy_name);
+        }
+        self
+    }
+
+    async fn exists(&self, name: &str) -> bool {
+        self.client.collection_info(name).await.is_ok()
     }
 
     fn payload_to_chunk(payload: &std::collections::HashMap<String, qdrant_client::qdrant::Value>) -> Chunk {
@@ -68,12 +86,22 @@ impl QdrantStore {
 #[async_trait]
 impl VectorStore for QdrantStore {
     async fn ensure_collection(&self, dim: u64) -> Result<()> {
-        match self.client.collection_info(&self.collection).await {
-            Ok(_) => {
-                tracing::debug!("Collection '{}' already exists", self.collection);
-                return Ok(());
+        if self.exists(&self.collection).await {
+            tracing::debug!("Collection '{}' already exists", self.collection);
+            return Ok(());
+        }
+
+        // Nothing under the new name — but if the old name is still there, this
+        // is an un-migrated project. Stop rather than silently start over.
+        if let Some(legacy) = &self.legacy_guard {
+            if self.exists(legacy).await {
+                return Err(anyhow!(
+                    "Collection '{legacy}' still holds this project's index, but the new \
+                     layout expects '{}'. Run `ragpilot migrate` to move it — nothing was \
+                     overwritten.",
+                    self.collection
+                ));
             }
-            Err(_) => {}
         }
 
         tracing::info!("Creating collection '{}' with dim={}", self.collection, dim);

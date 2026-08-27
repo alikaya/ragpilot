@@ -83,7 +83,7 @@ impl Drop for IndexRunLock {
 }
 
 pub fn try_acquire_index_lock(root: &Path) -> Result<IndexRunLock> {
-    let lock_path = Config::rag_dir(root).join("index.lock");
+    let lock_path = crate::paths::ProjectPaths::resolve(root).lock();
     if let Some(parent) = lock_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -569,10 +569,27 @@ fn ellipsize(s: &str, max: usize) -> String {
     format!("…{tail}")
 }
 
-fn resolve_store(config: &Config) -> Result<crate::store::qdrant::QdrantStore> {
+fn resolve_store(root: &Path, config: &Config) -> Result<crate::store::qdrant::QdrantStore> {
+    let paths = crate::paths::ProjectPaths::resolve(root);
+    build_store(&paths, config)
+}
+
+/// Build the vector store for an already-resolved project. On the global
+/// layout the collection is the project id; the legacy name is passed along as
+/// a guard so an un-migrated index is reported instead of shadowed by a new,
+/// empty collection.
+pub(crate) fn build_store(
+    paths: &crate::paths::ProjectPaths,
+    config: &Config,
+) -> Result<crate::store::qdrant::QdrantStore> {
     let mut cfg = config.qdrant.clone();
-    cfg.collection = Some(cfg.collection_name(&config.project.name));
-    crate::store::qdrant::QdrantStore::new(&cfg)
+    cfg.collection = Some(paths.collection(config.qdrant.collection.as_deref(), &config.project.name));
+
+    let store = crate::store::qdrant::QdrantStore::new(&cfg)?;
+    if paths.is_legacy() {
+        return Ok(store);
+    }
+    Ok(store.with_legacy_guard(paths.legacy_collection(&config.project.name)))
 }
 
 fn build_orchestrator(root: &PathBuf, config: &Config) -> Result<crate::orchestrator::IndexOrchestrator> {
@@ -582,7 +599,7 @@ fn build_orchestrator(root: &PathBuf, config: &Config) -> Result<crate::orchestr
     crate::store::sqlite::SqliteStore::new(db_path.clone())?;
 
     let embedder: Arc<dyn crate::embedder::Embedder> = Arc::from(crate::embedder::create(&config.embedding, root)?);
-    let vector_store: Arc<dyn crate::store::VectorStore> = Arc::new(resolve_store(config)?);
+    let vector_store: Arc<dyn crate::store::VectorStore> = Arc::new(resolve_store(root, config)?);
     let symbol_graph = Arc::new(crate::store::symbol_graph::SymbolGraphStore::new(db_path.clone()));
     let project_tree = Arc::new(crate::store::project_tree::ProjectTreeStore::new(db_path.clone()));
     let impact_index = Arc::new(crate::store::impact_index::ImpactIndexStore::new(db_path));
@@ -602,13 +619,22 @@ pub async fn cmd_init(force: bool) -> Result<()> {
     use colored::Colorize;
 
     let root = current_root()?;
-    let rag_dir = Config::rag_dir(&root);
-    let config_path = Config::config_path(&root);
+    let paths = crate::paths::ProjectPaths::resolve(&root);
+    let config_path = paths.config();
+
+    // A project on the global layout is recorded in the registry, so the MCP
+    // server (and `projects list`) can find it by folder afterwards. Legacy
+    // `.rag/` projects stay unregistered until `ragpilot migrate` runs.
+    if !paths.is_legacy() {
+        let mut registry = crate::paths::Registry::load()?;
+        registry.upsert(paths.root());
+        registry.save()?;
+    }
 
     // Only generate config when it's missing. `--force` drives a full
     // re-index (below) but must NOT clobber a user-customized config.
     if !config_path.exists() {
-        std::fs::create_dir_all(&rag_dir)?;
+        std::fs::create_dir_all(paths.data_dir())?;
         let project_name = root
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
@@ -648,7 +674,7 @@ pub async fn cmd_init(force: bool) -> Result<()> {
 fn load_config_or_explain(root: &Path) -> Result<Config> {
     let path = Config::config_path(root);
     if !path.exists() {
-        anyhow::bail!("No .rag/config.toml found. Run 'ragpilot init' first.");
+        anyhow::bail!("No config found at {}. Run 'ragpilot init' first.", path.display());
     }
     Config::load(&path)
         .map_err(|e| anyhow::anyhow!("Invalid config at {}: {e}", path.display()))
@@ -760,7 +786,7 @@ pub async fn cmd_status() -> Result<()> {
     }
 
     println!("\n{}", "─── Qdrant ──────────────────────────────".bold());
-    let store = resolve_store(&config)?;
+    let store = resolve_store(&root, &config)?;
     match store.collection_info().await {
         Ok(info) => {
             println!("  URL:        {}", config.qdrant.url);
@@ -843,7 +869,8 @@ pub async fn cmd_clean(yes: bool) -> Result<()> {
 
     let root = current_root()?;
     let config = load_config_or_explain(&root)?;
-    let coll = config.qdrant.collection_name(&config.project.name);
+    let coll = crate::paths::ProjectPaths::resolve(&root)
+        .collection(config.qdrant.collection.as_deref(), &config.project.name);
 
     if !yes {
         print!("{} Delete collection '{}'? [y/N] ", "!".yellow(), coll);
@@ -857,7 +884,7 @@ pub async fn cmd_clean(yes: bool) -> Result<()> {
         }
     }
 
-    let store = resolve_store(&config)?;
+    let store = resolve_store(&root, &config)?;
     store.delete_collection().await?;
     IndexState::default().save(&Config::state_path(&root))?;
     println!("{} Collection '{}' deleted.", "✓".green(), coll);

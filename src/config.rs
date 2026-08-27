@@ -85,9 +85,12 @@ pub struct QdrantConfig {
 }
 
 impl QdrantConfig {
+    /// Legacy collection naming: explicit `collection`, else the project name.
+    /// The global layout names collections after the project id instead — see
+    /// [`crate::paths::ProjectPaths::collection`].
     pub fn collection_name(&self, project_name: &str) -> String {
         let base = self.collection.as_deref().unwrap_or(project_name);
-        base.to_lowercase().replace([' ', '-'], "_")
+        crate::paths::normalize_collection(base)
     }
 }
 
@@ -317,7 +320,6 @@ impl Config {
         include_extensions: &[S],
         include_dirs: &[S],
     ) -> String {
-        let collection = project_name.to_lowercase().replace([' ', '-'], "_");
         let ext_array = toml_str_array(include_extensions);
         let dir_array = toml_str_array(include_dirs);
         format!(
@@ -337,7 +339,7 @@ provider = "local"
 
 [qdrant]
 url = "http://localhost:6334"
-collection = "{collection}"
+# collection = "custom-name"   # optional — defaults to the project id
 
 [indexing]
 chunk_size = 700
@@ -395,10 +397,25 @@ max_nodes = 200
         )
     }
 
-    pub fn rag_dir(root: &Path) -> PathBuf { root.join(".rag") }
-    pub fn state_path(root: &Path) -> PathBuf { Self::rag_dir(root).join("state.json") }
-    pub fn config_path(root: &Path) -> PathBuf { Self::rag_dir(root).join("config.toml") }
-    pub fn stores_db(root: &Path) -> PathBuf { Self::rag_dir(root).join("stores.db") }
+    // Every write target is resolved through `paths::ProjectPaths`, so a
+    // registered project reads and writes under `<data_root>/projects/<id>/`
+    // while a `.rag/` project keeps using its own folder. Call sites do not
+    // need to know which layout they are on.
+
+    /// The project's data directory: `<data_root>/projects/<id>/`, or the
+    /// legacy `.rag/`.
+    pub fn data_dir(root: &Path) -> PathBuf {
+        crate::paths::ProjectPaths::resolve(root).data_dir().to_path_buf()
+    }
+    pub fn state_path(root: &Path) -> PathBuf {
+        crate::paths::ProjectPaths::resolve(root).state()
+    }
+    pub fn config_path(root: &Path) -> PathBuf {
+        crate::paths::ProjectPaths::resolve(root).config()
+    }
+    pub fn stores_db(root: &Path) -> PathBuf {
+        crate::paths::ProjectPaths::resolve(root).stores_db()
+    }
 }
 
 /// Deep-merge `overlay` onto `base`: tables merge key by key, everything else

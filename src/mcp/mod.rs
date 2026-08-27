@@ -6,7 +6,6 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 use crate::config::Config;
 use crate::embedder;
-use crate::store::qdrant::QdrantStore;
 use crate::store::impact_index::ImpactIndexStore;
 use crate::store::project_tree::ProjectTreeStore;
 use crate::store::symbol_graph::SymbolGraphStore;
@@ -178,14 +177,14 @@ async fn build_context(root: &std::path::Path) -> anyhow::Result<Arc<McpContext>
     let embedder: Arc<dyn embedder::Embedder> = Arc::from(embedder::create(&config.embedding, root)?);
     eprintln!("ragpilot: model ready. MCP server running on stdio.");
 
-    // Vector store
-    let collection = config.qdrant.collection_name(&config.project.name);
-    let mut qdrant_cfg  = config.qdrant.clone();
-    qdrant_cfg.collection = Some(collection);
-    let vector_store: Arc<dyn crate::store::VectorStore> = Arc::new(QdrantStore::new(&qdrant_cfg)?);
+    // Vector store — collection name and the un-migrated-index guard both come
+    // from the resolved layout.
+    let project_paths = paths::ProjectPaths::resolve(root);
+    let vector_store: Arc<dyn crate::store::VectorStore> =
+        Arc::new(crate::indexer::build_store(&project_paths, &config)?);
 
-    // SQLite stores (all share same .rag/stores.db)
-    let db_path = Config::stores_db(root);
+    // SQLite stores (all share the project's single stores.db)
+    let db_path = project_paths.stores_db();
     crate::store::sqlite::SqliteStore::new(db_path.clone())?; // ensure schema exists
     let symbol_graph: Arc<SymbolGraphStore> = Arc::new(SymbolGraphStore::new(db_path.clone()));
     let project_tree: Arc<ProjectTreeStore> = Arc::new(ProjectTreeStore::new(db_path.clone()));

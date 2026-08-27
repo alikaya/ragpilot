@@ -417,7 +417,7 @@ pub fn resolve_project(registry: &Registry, path: &Path) -> Resolution {
     if let Some(entry) = registry.lookup(&root) {
         return Resolution::Registered { id: entry.id.clone(), root };
     }
-    if root.join(".rag").join("config.toml").exists() {
+    if legacy_dir(&root).join("config.toml").exists() {
         return Resolution::Legacy { root };
     }
     let candidates = registry.moved_candidates(&root);
@@ -425,6 +425,129 @@ pub fn resolve_project(registry: &Registry, path: &Path) -> Resolution {
         return Resolution::Moved { root, candidates };
     }
     Resolution::Unregistered { root }
+}
+
+// ── Per-project paths ──────────────────────────────────────────────────────
+
+/// Where one project's data actually lives, and what its collection is called.
+///
+/// Two layouts coexist during the transition:
+/// * **global** — `<data_root>/projects/<id>/`, the target layout;
+/// * **legacy** — the project's own `.rag/`, for folders that predate it.
+///
+/// Resolution is registry-first, so a registered project never falls back to a
+/// stale `.rag/` that happens to still be lying around.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectPaths {
+    root: PathBuf,
+    data: PathBuf,
+    /// `None` for the legacy layout — a `.rag/` project has no id.
+    id: Option<String>,
+}
+
+impl ProjectPaths {
+    /// Registry first, then a legacy `.rag/`, then the global slot this folder
+    /// *would* get — which is what `init` is about to create.
+    pub fn resolve(root: &Path) -> Self {
+        let registry = load_registry_lenient();
+        Self::resolve_with(&registry, root)
+    }
+
+    /// [`resolve`](Self::resolve) against an already-loaded registry — avoids
+    /// re-reading `registry.json` when the caller already has it.
+    pub fn resolve_with(registry: &Registry, root: &Path) -> Self {
+        let root = canonical(root).unwrap_or_else(|_| root.to_path_buf());
+
+        if let Some(entry) = registry.lookup(&root) {
+            let id = entry.id.clone();
+            return Self { data: project_dir(&id), root, id: Some(id) };
+        }
+        if legacy_dir(&root).join("config.toml").exists() {
+            return Self { data: legacy_dir(&root), root, id: None };
+        }
+        Self::global(&root)
+    }
+
+    /// The global slot for a folder, whether or not it is registered yet.
+    /// `init` and `migrate` write here; resolution never downgrades to `.rag/`.
+    pub fn global(root: &Path) -> Self {
+        let root = canonical(root).unwrap_or_else(|_| root.to_path_buf());
+        let id = project_id(&root);
+        Self { data: project_dir(&id), root, id: Some(id) }
+    }
+
+    /// The project's own `.rag/` — the migrate *source*, never a write target
+    /// for new projects.
+    pub fn legacy(root: &Path) -> Self {
+        let root = canonical(root).unwrap_or_else(|_| root.to_path_buf());
+        Self { data: legacy_dir(&root), root, id: None }
+    }
+
+    pub fn root(&self) -> &Path { &self.root }
+    pub fn data_dir(&self) -> &Path { &self.data }
+    pub fn id(&self) -> Option<&str> { self.id.as_deref() }
+    pub fn is_legacy(&self) -> bool { self.id.is_none() }
+
+    pub fn config(&self) -> PathBuf { self.data.join("config.toml") }
+    pub fn state(&self) -> PathBuf { self.data.join("state.json") }
+    pub fn stores_db(&self) -> PathBuf { self.data.join("stores.db") }
+    pub fn lock(&self) -> PathBuf { self.data.join("index.lock") }
+
+    /// Tree-sitter query overrides. A project-local `.rag/queries/` still wins
+    /// when it exists — it is read-only, hand-authored and worth keeping next
+    /// to the code it describes; otherwise the global slot is used.
+    pub fn queries(&self) -> PathBuf {
+        let project_local = legacy_dir(&self.root).join("queries");
+        if project_local.is_dir() {
+            return project_local;
+        }
+        self.data.join("queries")
+    }
+
+    /// Qdrant collection name: an explicit `[qdrant] collection` wins, then the
+    /// project id (global layout), then the legacy lowercased project name.
+    pub fn collection(&self, explicit: Option<&str>, project_name: &str) -> String {
+        match (explicit, &self.id) {
+            (Some(name), _) => normalize_collection(name),
+            (None, Some(id)) => id.clone(),
+            (None, None) => normalize_collection(project_name),
+        }
+    }
+
+    /// What this project's collection was called before the global layout —
+    /// used to detect an un-migrated index instead of silently creating a
+    /// second, empty collection beside it.
+    pub fn legacy_collection(&self, project_name: &str) -> String {
+        normalize_collection(project_name)
+    }
+}
+
+/// The pre-global, project-local data directory.
+pub fn legacy_dir(root: &Path) -> PathBuf { root.join(".rag") }
+
+/// Qdrant collection names: lowercase, no spaces or dashes.
+pub fn normalize_collection(raw: &str) -> String {
+    raw.to_lowercase().replace([' ', '-'], "_")
+}
+
+/// Load the registry for path resolution. A broken registry must not silently
+/// route a registered project to a fresh, empty data directory, so it is
+/// reported — once per process — before falling back to empty.
+fn load_registry_lenient() -> Registry {
+    match Registry::load() {
+        Ok(reg) => reg,
+        Err(e) => {
+            static WARNED: std::sync::OnceLock<()> = std::sync::OnceLock::new();
+            if WARNED.set(()).is_ok() {
+                eprintln!(
+                    "ragpilot: {} is unreadable ({e}) — treating every project as unregistered. \
+                     Fix or delete it before indexing.",
+                    registry_path().display()
+                );
+            }
+            Registry::default()
+        }
+    }
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────
@@ -673,5 +796,123 @@ mod tests {
         std::fs::write(&path, "{ not json").unwrap();
         assert!(Registry::load_from(&path).is_err());
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod project_paths_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    fn scratch(label: &str) -> PathBuf {
+        static N: AtomicUsize = AtomicUsize::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "ragpilot-pp-{}-{}-{}",
+            std::process::id(),
+            N.fetch_add(1, Ordering::SeqCst),
+            label
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn registered_project_writes_nothing_into_the_project_folder() {
+        let dir = scratch("global");
+        let project = canonical(&dir).unwrap();
+
+        let mut reg = Registry::load_from(&dir.join("registry.json")).unwrap();
+        let id = reg.upsert(&project).id.clone();
+        let paths = ProjectPaths::resolve_with(&reg, &project);
+
+        assert_eq!(paths.id(), Some(id.as_str()));
+        assert!(!paths.is_legacy());
+        for p in [paths.config(), paths.state(), paths.stores_db(), paths.lock(), paths.queries()] {
+            assert!(
+                !p.starts_with(&project),
+                "{} would be written inside the project folder",
+                p.display()
+            );
+            assert!(p.starts_with(project_dir(&id)), "{} escaped the project slot", p.display());
+        }
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn legacy_project_keeps_using_its_own_rag_dir() {
+        let dir = scratch("legacy");
+        std::fs::create_dir_all(dir.join(".rag")).unwrap();
+        std::fs::write(dir.join(".rag").join("config.toml"), "").unwrap();
+        let project = canonical(&dir).unwrap();
+
+        let reg = Registry::load_from(&dir.join("registry.json")).unwrap();
+        let paths = ProjectPaths::resolve_with(&reg, &project);
+
+        assert!(paths.is_legacy());
+        assert_eq!(paths.config(), project.join(".rag").join("config.toml"));
+        assert_eq!(paths.state(), project.join(".rag").join("state.json"));
+        assert_eq!(paths.stores_db(), project.join(".rag").join("stores.db"));
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn registry_wins_over_a_leftover_rag_dir() {
+        let dir = scratch("both");
+        std::fs::create_dir_all(dir.join(".rag")).unwrap();
+        std::fs::write(dir.join(".rag").join("config.toml"), "").unwrap();
+        let project = canonical(&dir).unwrap();
+
+        let mut reg = Registry::load_from(&dir.join("registry.json")).unwrap();
+        reg.upsert(&project);
+
+        // A migrated project must not fall back to the `.rag/` left behind.
+        assert!(!ProjectPaths::resolve_with(&reg, &project).is_legacy());
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn project_local_queries_still_override() {
+        let dir = scratch("queries");
+        let project = canonical(&dir).unwrap();
+        let mut reg = Registry::load_from(&dir.join("registry.json")).unwrap();
+        let id = reg.upsert(&project).id.clone();
+
+        // With no `.rag/queries/`, the global slot is used…
+        let paths = ProjectPaths::resolve_with(&reg, &project);
+        assert_eq!(paths.queries(), project_dir(&id).join("queries"));
+
+        // …and a hand-authored project-local override still wins.
+        std::fs::create_dir_all(project.join(".rag").join("queries")).unwrap();
+        assert_eq!(paths.queries(), project.join(".rag").join("queries"));
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn collection_naming_follows_the_layout() {
+        let global = ProjectPaths {
+            root: PathBuf::from("/p/my-app"),
+            data: PathBuf::from("/d/my-app-1234abcd"),
+            id: Some("my-app-1234abcd".into()),
+        };
+        let legacy = ProjectPaths {
+            root: PathBuf::from("/p/my-app"),
+            data: PathBuf::from("/p/my-app/.rag"),
+            id: None,
+        };
+
+        // Global: the id names the collection.
+        assert_eq!(global.collection(None, "My App"), "my-app-1234abcd");
+        // Legacy: the old lowercased project name.
+        assert_eq!(legacy.collection(None, "My App"), "my_app");
+        // An explicit `[qdrant] collection` wins on both layouts.
+        assert_eq!(global.collection(Some("Team Index"), "My App"), "team_index");
+        assert_eq!(legacy.collection(Some("Team Index"), "My App"), "team_index");
+        // The guard looks for what the collection used to be called.
+        assert_eq!(global.legacy_collection("My App"), "my_app");
     }
 }

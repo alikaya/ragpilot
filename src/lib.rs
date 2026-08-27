@@ -362,17 +362,19 @@ async fn cmd_setup(args: &[String]) -> anyhow::Result<()> {
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "project".to_string());
 
-    // .rag/config.toml
-    let rag_dir = root.join(".rag");
-    let config_path = rag_dir.join("config.toml");
-    std::fs::create_dir_all(&rag_dir)?;
+    // The project config now lives in the project's data directory — under
+    // `<data_root>/projects/<id>/` for a new project, or the legacy `.rag/`
+    // for one that has not migrated yet.
+    let project_paths = paths::ProjectPaths::resolve(&root);
+    let config_path = project_paths.config();
+    std::fs::create_dir_all(project_paths.data_dir())?;
     if !config_path.exists() {
         let choices = wizard::configure(&root);
         std::fs::write(
             &config_path,
             config::Config::template_with(&project_name, &choices.extensions, &choices.include_dirs),
         )?;
-        println!("{} .rag/config.toml", "✓".green());
+        println!("{} {}", "✓".green(), config_path.display());
         println!("    {} {}", "extensions:".dimmed(), choices.extensions.join(", "));
         let dirs = if choices.include_dirs.is_empty() {
             "(entire project root)".to_string()
@@ -381,7 +383,7 @@ async fn cmd_setup(args: &[String]) -> anyhow::Result<()> {
         };
         println!("    {} {}", "directories:".dimmed(), dirs);
     } else {
-        println!("{} .rag/config.toml (already exists)", "i".blue());
+        println!("{} {} (already exists)", "i".blue(), config_path.display());
     }
 
     // Agent-specific MCP registration (claude, codex, cursor, vscode,
