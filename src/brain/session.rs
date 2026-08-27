@@ -138,7 +138,13 @@ pub async fn cmd_session_end(
 /// need. Absent or unparseable stdin is not an error — the flag may have been
 /// used instead.
 fn transcript_from_stdin() -> Option<PathBuf> {
-    use std::io::Read;
+    use std::io::{IsTerminal, Read};
+
+    // A hook is fed its payload on a pipe. Run by hand in a terminal there is
+    // no payload coming, and reading to EOF would simply hang.
+    if std::io::stdin().is_terminal() {
+        return None;
+    }
 
     let mut raw = String::new();
     std::io::stdin().read_to_string(&mut raw).ok()?;

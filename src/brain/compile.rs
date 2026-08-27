@@ -180,9 +180,9 @@ async fn run(cfg: &BrainConfig, light: bool, engine_override: Option<&str>) -> R
 
     let chunk_budget = (cfg.compiler.daily_token_budget as f64 * CHUNK_SHARE) as usize;
     let index = existing_index();
-    let chunks: Vec<String> = chunk(&pending, chunk_budget.max(1_000), cfg.compiler.daily_token_budget)
+    let chunks: Vec<Chunk> = chunk(&pending, chunk_budget.max(1_000), cfg.compiler.daily_token_budget)
         .into_iter()
-        .map(|body| format!("{index}\n{body}"))
+        .map(|c| Chunk { body: format!("{index}\n{}", c.body), sources: c.sources })
         .collect();
     println!(
         "{} Compiling {} source(s) in {} chunk(s) with '{}'…",
@@ -194,16 +194,23 @@ async fn run(cfg: &BrainConfig, light: bool, engine_override: Option<&str>) -> R
 
     let distiller = Distiller::new(engine.as_ref());
     let total = chunks.len();
-    for (i, body) in chunks.iter().enumerate() {
+    let mut compiled: Vec<usize> = Vec::new();
+    for (i, chunk) in chunks.iter().enumerate() {
+        let before = report.skipped_chunks.len();
         distiller
-            .digest(&format!("chunk {}/{total}", i + 1), body, &mut report)
+            .digest(&format!("chunk {}/{total}", i + 1), &chunk.body, &mut report)
             .await?;
+        // A chunk that was skipped leaves its sources unrecorded, so the next
+        // run picks them up again instead of losing the material silently.
+        if report.skipped_chunks.len() == before {
+            compiled.extend(chunk.sources.iter().copied());
+        }
     }
     distiller.finish()?;
 
     // Only mark sources compiled once their output is safely on disk.
-    for source in &pending {
-        state.record(&source.path, &source.hash);
+    for i in compiled {
+        state.record(&pending[i].path, &pending[i].hash);
     }
     state.save();
 
@@ -254,15 +261,23 @@ fn gather(state: &CompileState, light: bool) -> Result<Vec<Source>> {
     Ok(out)
 }
 
+/// One model call's worth of raw material, and which sources went into it.
+struct Chunk {
+    body: String,
+    /// Indices into the `sources` slice — so a skipped chunk can leave exactly
+    /// its own sources unrecorded.
+    sources: Vec<usize>,
+}
+
 /// Split the raw material into model-sized chunks, stopping at the daily
 /// budget. Sources are never split mid-file — a note built from half a day's
 /// log loses the half that explained it.
-fn chunk(sources: &[Source], chunk_budget: usize, total_budget: usize) -> Vec<String> {
-    let mut chunks = Vec::new();
-    let mut current = String::new();
+fn chunk(sources: &[Source], chunk_budget: usize, total_budget: usize) -> Vec<Chunk> {
+    let mut chunks: Vec<Chunk> = Vec::new();
+    let mut current = Chunk { body: String::new(), sources: Vec::new() };
     let mut spent = 0usize;
 
-    for source in sources {
+    for (i, source) in sources.iter().enumerate() {
         let piece = format!("--- source: {} ---\n{}\n", source.label, source.text.trim());
         let cost = crate::tokens::estimate(&piece);
         if spent + cost > total_budget {
@@ -270,12 +285,16 @@ fn chunk(sources: &[Source], chunk_budget: usize, total_budget: usize) -> Vec<St
         }
         spent += cost;
 
-        if !current.is_empty() && crate::tokens::estimate(&current) + cost > chunk_budget {
-            chunks.push(std::mem::take(&mut current));
+        if !current.body.is_empty() && crate::tokens::estimate(&current.body) + cost > chunk_budget {
+            chunks.push(std::mem::replace(
+                &mut current,
+                Chunk { body: String::new(), sources: Vec::new() },
+            ));
         }
-        current.push_str(&piece);
+        current.body.push_str(&piece);
+        current.sources.push(i);
     }
-    if !current.trim().is_empty() {
+    if !current.body.trim().is_empty() {
         chunks.push(current);
     }
     chunks
@@ -772,7 +791,7 @@ CONTRADICTS: markdown-source-of-truth | the new material claims Qdrant is author
 
         let chunks: Vec<String> = chunk(&sources, 2_000, 100_000)
             .into_iter()
-            .map(|body| format!("{index}\n{body}"))
+            .map(|c| format!("{index}\n{}", c.body))
             .collect();
 
         assert!(chunks.len() > 1);
@@ -799,12 +818,21 @@ CONTRADICTS: markdown-source-of-truth | the new material claims Qdrant is author
         assert!(chunks.len() > 1, "everything landed in one chunk");
         for c in &chunks {
             // A single source may exceed the chunk budget; it is still never split.
-            assert!(c.contains("--- source:"));
+            assert!(c.body.contains("--- source:"));
+            assert!(!c.sources.is_empty(), "a chunk with no source attribution");
         }
+        // Every source is attributed to exactly one chunk — the basis for
+        // retrying only what was skipped.
+        let mut attributed: Vec<usize> = chunks.iter().flat_map(|c| c.sources.clone()).collect();
+        attributed.sort();
+        assert_eq!(attributed, (0..sources.len()).collect::<Vec<_>>());
 
         // The total budget stops the run early rather than overspending.
         let capped = chunk(&sources, 2_000, 3_000);
-        let spent: usize = capped.iter().map(|c| crate::tokens::estimate(c)).sum();
+        let spent: usize = capped.iter().map(|c| crate::tokens::estimate(&c.body)).sum();
         assert!(spent <= 3_000, "total budget exceeded: {spent}");
+        // …and the sources that never made it are simply not attributed.
+        let carried: usize = capped.iter().map(|c| c.sources.len()).sum();
+        assert!(carried < sources.len(), "budget cap attributed every source");
     }
 }

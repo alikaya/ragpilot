@@ -6,6 +6,19 @@ All notable changes to **ragpilot** are documented here. The format is based on
 
 ## [Unreleased]
 
+### Fixed
+- **`brain compile` no longer loses the material behind a skipped chunk.** A
+  chunk whose model output failed to parse was reported as skipped, but its
+  source files were still recorded as compiled — so that day's log was never
+  retried and its content was silently gone. Chunks now carry the sources that
+  went into them, and only the sources of chunks that actually succeeded are
+  recorded.
+- **`ragpilot brain session-end` no longer hangs in a terminal.** It reads the
+  hook payload from stdin, which blocks to EOF on a tty; run by hand with no
+  `--transcript` it simply sat there. It now checks for a terminal first and
+  exits with the same message it always intended to print.
+- `brain doctor`'s git check leaked a heap allocation per pending file.
+
 ## [0.7.0] — 2026-08-27
 
 The **second brain**: a persistent memory that belongs to you and your machine

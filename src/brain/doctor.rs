@@ -239,18 +239,18 @@ fn git_check(fix: bool) -> Finding {
     let Ok(output) = output else {
         return Finding::bad("Git", "git is not available");
     };
-    let pending: Vec<&str> = String::from_utf8_lossy(&output.stdout)
+    let pending: Vec<String> = String::from_utf8_lossy(&output.stdout)
         .lines()
         .map(|l| l.trim())
         .filter(|l| !l.is_empty())
-        .map(|l| Box::leak(l.to_string().into_boxed_str()) as &str)
+        .map(|l| l.to_string())
         .collect();
 
     if pending.is_empty() {
         return Finding::ok("Git clean");
     }
     if !fix {
-        let mut listed: Vec<String> = pending.iter().take(10).map(|s| s.to_string()).collect();
+        let mut listed: Vec<String> = pending.iter().take(10).cloned().collect();
         listed.push("Commit them with --fix.".into());
         return Finding::bad(format!("{} uncommitted change(s)", pending.len()), listed.join("\n"));
     }
