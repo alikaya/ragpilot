@@ -6,13 +6,7 @@ use crate::mcp::protocol::{McpRequest, McpResponse};
 pub fn tool_definitions() -> Vec<serde_json::Value> {
     vec![json!({
         "name": "review_semantic_diff",
-        "description": "Semantic diff of code changes: which SYMBOLS changed \
-            (added / removed / signature_changed / modified) and their blast \
-            radius — callers (from the symbol graph) and dependent files (from \
-            the import graph). Use this for PR/commit review and to write \
-            accurate commit messages (e.g. \"changed the return type of X, which \
-            affects Y and Z\"). Defaults to the working tree vs HEAD; pass a ref \
-            like \"HEAD~1\" or a range like \"main..HEAD\".",
+        "description": "Which symbols changed (added/removed/signature/modified) and their blast radius — callers and dependent files. For reviewing a diff or writing a commit message.",
         "inputSchema": {
             "type": "object",
             "properties": {

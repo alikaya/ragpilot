@@ -20,7 +20,7 @@ pub fn tool_definitions(search_desc: &str) -> Vec<serde_json::Value> {
                     "k":     { "type": "integer", "description": "Results count (default 6)", "default": 6 },
                     "scope": {
                         "type": "string",
-                        "description": "Where to search: project (default, the codebase), brain (the second brain), or both. With brain or both the result is an object keyed by scope.",
+                        "description": "project (default) | brain | both. brain/both return an object keyed by scope.",
                         "enum": ["project", "brain", "both"],
                         "default": "project"
                     },
@@ -38,7 +38,7 @@ pub fn tool_definitions(search_desc: &str) -> Vec<serde_json::Value> {
         }),
         json!({
             "name": "rag_get_chunks",
-            "description": "Fetch full content of specific chunks by IDs returned from rag_search.",
+            "description": "Full content of chunks by id from rag_search.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -50,7 +50,7 @@ pub fn tool_definitions(search_desc: &str) -> Vec<serde_json::Value> {
         }),
         json!({
             "name": "rag_get_file_ranges",
-            "description": "Read specific line ranges or symbol definitions from a file.",
+            "description": "Read line ranges or a symbol definition from a file.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -72,7 +72,7 @@ pub fn tool_definitions(search_desc: &str) -> Vec<serde_json::Value> {
         }),
         json!({
             "name": "rag_get_skeleton",
-            "description": "Return a token-efficient skeleton of a file: signatures, struct/enum/type definitions, imports and doc comments, with function bodies elided to '...'. Prefer this over reading whole files when you only need to understand a file's structure.",
+            "description": "A file's shape: signatures, types, imports, doc comments; bodies elided. Cheaper than reading the file when you only need its structure.",
             "inputSchema": {
                 "type": "object",
                 "properties": { "path": { "type": "string" } },

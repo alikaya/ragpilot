@@ -25,6 +25,13 @@ All notable changes to **ragpilot** are documented here. The format is based on
   model cannot argue with. A hand-written dangling link is still reported, which
   is what that check is for.
 
+### Changed
+- **Tool descriptions trimmed: ~1940 → ~1570 tokens (19%).** Tool schemas sit in
+  the prefix of every single request, so their cost is paid continuously rather
+  than per call. Each description still says when to reach for the tool; the
+  prose around that is gone. A project created before this keeps its own
+  `search_tool_description` — configs are the user's, and are never rewritten.
+
 ### Added
 - **`ragpilot dashboard`** — a local window onto the project fleet and the
   brain, in two views. **Projects**: layout, index freshness, chunk and point

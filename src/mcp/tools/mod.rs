@@ -95,8 +95,8 @@ fn no_project_message() -> String {
         .unwrap_or_else(|| NO_PROJECT_MSG.to_string())
 }
 
-const DEFAULT_SEARCH_DESC: &str = "Searches the local project codebase and documentation \
-using semantic similarity. Returns relevant code snippets and docs with file paths.";
+const DEFAULT_SEARCH_DESC: &str = "Semantic search over this project's code and docs. Returns \
+path, line range and a snippet — read the ranges you need with rag_get_file_ranges.";
 
 /// Whether a request is a `brain_*` tool call.
 ///

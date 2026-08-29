@@ -7,7 +7,7 @@ pub fn tool_definitions() -> Vec<serde_json::Value> {
     vec![
         json!({
             "name": "nav_symbol_resolve",
-            "description": "Find where a symbol (function, class, struct, etc.) is defined. Returns file path, line number, and call graph edges.",
+            "description": "Where a symbol is defined, with its call graph edges.",
             "inputSchema": {
                 "type": "object",
                 "properties": {

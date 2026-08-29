@@ -16,23 +16,22 @@ pub fn tool_definitions() -> Vec<serde_json::Value> {
     vec![
         json!({
             "name": "brain_load",
-            "description": "Load the session-opening context from the second brain: who you are \
-(persona), what was left half-done, and what was recently decided. Call this FIRST in a session, \
-before anything else. Works in any folder, project or not.",
+            "description": "Session-opening context from the second brain: persona, rules, open threads, \
+recent decisions. Call first in a session. Works in any folder.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "max_tokens": {
                         "type": "integer",
-                        "description": "Budget for the package (default: brain config's load.max_tokens)"
+                        "description": "Token budget (default: from brain config)"
                     }
                 }
             }
         }),
         json!({
             "name": "brain_search",
-            "description": "Semantic search across the second brain — knowledge notes, daily logs \
-and learned skills. Use it when the user refers to something decided or learned earlier.",
+            "description": "Semantic search over the second brain: knowledge, daily logs, skills. Use it \
+when the user refers to something decided or learned earlier.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -40,7 +39,7 @@ and learned skills. Use it when the user refers to something decided or learned 
                     "limit":  { "type": "integer", "description": "Results count (default 6)", "default": 6 },
                     "filter": {
                         "type": "string",
-                        "description": "Narrow to one area: knowledge | daily | skills",
+                        "description": "knowledge | daily | skills",
                         "enum": ["knowledge", "daily", "skills"]
                     }
                 },
@@ -49,22 +48,21 @@ and learned skills. Use it when the user refers to something decided or learned 
         }),
         json!({
             "name": "brain_note",
-            "description": "Record one thing worth keeping — a decision, a task, a fact, a receipt. \
-Writes a timestamped line to today's daily log and makes it searchable immediately. Use it the \
-moment something is decided, not at the end of the session.",
+            "description": "Record one thing worth keeping, the moment it happens. `kind: \"rule\"` stores \
+a correction you were given (with `why`) and loads it every session after.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "text": { "type": "string" },
                     "kind": {
                         "type": "string",
-                        "description": "note | decision | task | receipt | rule (default: note). \"rule\" records a correction you were given as a standing rule — it goes to rules.md and is loaded at the start of every session, so the same correction is never needed twice.",
+                        "description": "note | decision | task | receipt | rule (default: note)",
                         "enum": ["note", "decision", "task", "receipt", "rule"],
                         "default": "note"
                     },
                     "why": {
                         "type": "string",
-                        "description": "For kind \"rule\": the reason behind it. A rule without its reason gets misapplied."
+                        "description": "For kind \"rule\": why. A rule without its reason gets misapplied."
                     }
                 },
                 "required": ["text"]
@@ -72,16 +70,15 @@ moment something is decided, not at the end of the session.",
         }),
         json!({
             "name": "brain_flush",
-            "description": "Close the session: write a summary block to today's daily log. Call it \
-before the session ends. YOU write the summary — this tool only stores it. Passing the decisions \
-and the half-finished work separately is what makes the next brain_load useful.",
+            "description": "Close the session: store your summary, the decisions, what is still open and \
+what you finished. You write it; this only stores it.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "summary":      { "type": "string", "description": "What happened this session" },
-                    "decisions":    { "type": "array", "items": { "type": "string" }, "description": "Decisions made" },
-                    "open_threads": { "type": "array", "items": { "type": "string" }, "description": "What is still half-done. Kept in threads.md until closed, so it survives sessions that never mention it." },
-                    "closed_threads": { "type": "array", "items": { "type": "string" }, "description": "Open threads that are now finished" }
+                    "summary":      { "type": "string", "description": "What happened" },
+                    "decisions":    { "type": "array", "items": { "type": "string" }, "description": "Decisions" },
+                    "open_threads": { "type": "array", "items": { "type": "string" }, "description": "Still half-done; kept until closed" },
+                    "closed_threads": { "type": "array", "items": { "type": "string" }, "description": "Threads now finished" }
                 },
                 "required": ["summary"]
             }

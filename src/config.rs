@@ -387,12 +387,7 @@ max_context_files = 8
 max_context_chunks = 20
 max_context_tokens = 12000
 auto_update_before_search = false
-search_tool_description = """
-Searches the local project codebase and documentation using semantic similarity.
-Call this tool whenever the user asks about: how code works, where something is
-implemented, project structure, functions, modules, configuration, or any
-project-specific question. Returns relevant code snippets and docs with file paths.
-"""
+search_tool_description = "Semantic search over this project's code and docs. Returns path, line range and a snippet — read the ranges you need with rag_get_file_ranges."
 
 [watcher]
 enabled = false

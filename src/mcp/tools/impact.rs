@@ -9,7 +9,7 @@ use crate::parser::Symbol;
 pub fn tool_definitions() -> Vec<serde_json::Value> {
     vec![json!({
         "name": "impact_analyze",
-        "description": "Given symbols or file paths, return which files and symbols would be affected by changes. Walks the call graph transitively (who calls the changed code, and who calls those callers) and the import graph. Use before refactoring.",
+        "description": "What a change to these symbols or files would affect, transitively (call graph + imports). Use before refactoring.",
         "inputSchema": {
             "type": "object",
             "properties": {

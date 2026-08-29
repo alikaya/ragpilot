@@ -17,7 +17,7 @@ const BRAIN_BUNDLE_TOKENS: usize = 600;
 pub fn tool_definitions() -> Vec<serde_json::Value> {
     vec![json!({
         "name": "context_bundle",
-        "description": "Single call to get a complete, token-budgeted context package for a task. Combines semantic search results, relevant symbols, impact summary, and a project tree snapshot. Call this FIRST before any other tool.",
+        "description": "Token-budgeted context for a task in one call: search hits, symbols, impact and tree. Use it to open a task.",
         "inputSchema": {
             "type": "object",
             "properties": {

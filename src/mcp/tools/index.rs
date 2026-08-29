@@ -9,12 +9,12 @@ pub fn tool_definitions() -> Vec<serde_json::Value> {
     vec![
         json!({
             "name": "rag_index_status",
-            "description": "Returns RAG index statistics: files indexed, chunks, last commit, dirty file count.",
+            "description": "Index statistics: files, chunks, last commit, dirty count.",
             "inputSchema": { "type": "object", "properties": {} }
         }),
         json!({
             "name": "rag_ensure_index",
-            "description": "Incrementally re-indexes all changed files. Call this to make sure the index is current before starting a task.",
+            "description": "Re-index changed files. Call when the index is stale.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
