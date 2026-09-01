@@ -173,6 +173,7 @@ async fn dispatch(observer: Option<Arc<dyn ToolObserver>>) -> anyhow::Result<()>
                    ragpilot migrate --all <dir>    Migrate all of them\n\
                    ragpilot projects list          List registered projects\n\
                    ragpilot projects rm <id>       Unregister + delete its data and collection\n\
+                   ragpilot projects sync [--agent <a>] [--dry-run]  Bring every project's files up to date\n\
                    ragpilot projects relink <id> <path>  Point a project at its new folder\n\
                    ragpilot brain init [--engine <name>]  Set up the second-brain vault\n\
                    ragpilot brain index            Re-index the brain vault\n\

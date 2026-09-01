@@ -21,6 +21,27 @@ pub const PROJECT_CLIENTS: &[&str] = &["claude", "codex", "cursor", "vscode", "o
 /// Clients that only support a global ($HOME) config — handled via snippet.
 pub const GLOBAL_CLIENTS: &[&str] = &["windsurf", "antigravity"];
 
+/// The per-project MCP config a client reads, if it has one.
+///
+/// Kept next to the writers so the two cannot drift: `projects sync` uses this
+/// to decide whether a project still needs configuring.
+pub fn mcp_config_path(agent: &str, root: &Path) -> Option<std::path::PathBuf> {
+    let rel = match agent {
+        "claude" => ".mcp.json",
+        "cursor" => ".cursor/mcp.json",
+        "vscode" => ".vscode/mcp.json",
+        "opencode" => "opencode.json",
+        "codex" => ".codex/config.toml",
+        _ => return None,
+    };
+    Some(root.join(rel))
+}
+
+/// The agent markdown file a client reads.
+pub fn agent_doc(agent: &str) -> &'static str {
+    if agent == "claude" { "CLAUDE.md" } else { "AGENTS.md" }
+}
+
 /// Write (or migrate) the ragpilot MCP registration for `agent`.
 pub fn configure(agent: &str, root: &Path) -> Result<()> {
     match agent.to_lowercase().as_str() {

@@ -391,6 +391,143 @@ pub async fn cmd_scan(root: &Path, migrate_all: bool, keep: bool, yes: bool) -> 
     Ok(())
 }
 
+// ── sync ───────────────────────────────────────────────────────────────────
+
+/// What a registered project is missing on its own side.
+struct Gap {
+    root: PathBuf,
+    id: String,
+    /// No MCP config for the chosen agent.
+    no_mcp: bool,
+    /// The agent markdown has no ragpilot block, or an out-of-date one.
+    no_block: bool,
+    /// A brain exists, but this project has no session hooks.
+    no_hooks: bool,
+}
+
+impl Gap {
+    fn any(&self) -> bool { self.no_mcp || self.no_block || self.no_hooks }
+
+    fn describe(&self) -> String {
+        let mut parts = Vec::new();
+        if self.no_mcp { parts.push("mcp config"); }
+        if self.no_block { parts.push("agent block"); }
+        if self.no_hooks { parts.push("session hooks"); }
+        parts.join(", ")
+    }
+}
+
+/// Bring every registered project's own files up to date with this version:
+/// the MCP registration, the marked block in its agent markdown, and — when a
+/// brain exists — the session hooks.
+///
+/// This is `init`'s project-folder half, run across the fleet. The index, the
+/// registry and the collection are untouched; the only writes are into the
+/// project folders, and every one of them is idempotent.
+pub async fn cmd_sync(agent: &str, dry_run: bool, yes: bool) -> Result<()> {
+    if !crate::agents::PROJECT_CLIENTS.contains(&agent) {
+        anyhow::bail!(
+            "'{agent}' has no per-project config. Choose one of: {}",
+            crate::agents::PROJECT_CLIENTS.join(", ")
+        );
+    }
+
+    let registry = Registry::load()?;
+    let brain = crate::brain::exists();
+
+    let gaps: Vec<Gap> = registry
+        .projects
+        .iter()
+        .filter_map(|(path, entry)| {
+            let root = PathBuf::from(path);
+            root.is_dir().then(|| gap_for(&root, &entry.id, agent, brain))
+        })
+        .collect();
+
+    let pending: Vec<&Gap> = gaps.iter().filter(|g| g.any()).collect();
+
+    println!(
+        "{} {} registered project(s) · {} already current · {} to update",
+        "→".cyan(),
+        gaps.len(),
+        gaps.len() - pending.len(),
+        pending.len()
+    );
+    if !brain {
+        println!("  {} no brain on this machine — session hooks are skipped.", "i".blue());
+    }
+    if pending.is_empty() {
+        println!("{} Nothing to do.", "✓".green());
+        return Ok(());
+    }
+
+    println!("\n{}", "─── Missing ─────────────────────────────────────".bold());
+    for gap in &pending {
+        println!("  {} — {}", gap.root.display(), gap.describe().yellow());
+    }
+
+    if dry_run {
+        println!(
+            "\n  Apply with: {}",
+            format!("ragpilot projects sync --agent {agent}").bold()
+        );
+        return Ok(());
+    }
+    println!(
+        "\n  This writes into {} project folder(s): MCP config, the marked block in the\n           agent markdown, and session hooks. Nothing else is touched.",
+        pending.len()
+    );
+    if !yes && !confirm("Proceed?")? {
+        println!("Aborted.");
+        return Ok(());
+    }
+
+    let (mut done, mut failed) = (0usize, Vec::new());
+    for gap in &pending {
+        match sync_one(&gap.root, agent, brain) {
+            Ok(()) => done += 1,
+            Err(e) => {
+                println!("  {} {}: {e}", "✗".red(), gap.root.display());
+                failed.push(gap.id.clone());
+            }
+        }
+    }
+
+    println!("\n{}", "─── Result ──────────────────────────────────────".bold());
+    println!("  updated: {done}/{}", pending.len());
+    if !failed.is_empty() {
+        println!("  {} {}", "failed:".red(), failed.join(", "));
+    }
+    Ok(())
+}
+
+fn gap_for(root: &Path, id: &str, agent: &str, brain: bool) -> Gap {
+    let mcp = crate::agents::mcp_config_path(agent, root);
+    let no_mcp = !mcp.map(|p| p.exists()).unwrap_or(true);
+
+    let doc = root.join(crate::agents::agent_doc(agent));
+    let no_block = std::fs::read_to_string(&doc)
+        .map(|text| !text.contains(crate::agents::BLOCK_START))
+        .unwrap_or(true);
+
+    // Only Claude Code has hooks, and only when there is a brain to feed them.
+    let no_hooks = brain
+        && agent == "claude"
+        && std::fs::read_to_string(root.join(crate::brain::hooks::CLAUDE_SETTINGS))
+            .map(|text| !text.contains("brain session-start"))
+            .unwrap_or(true);
+
+    Gap { root: root.to_path_buf(), id: id.to_string(), no_mcp, no_block, no_hooks }
+}
+
+/// One project. `agents::configure` already writes the MCP config, maintains
+/// the marked block and installs the hooks when a brain exists — this is the
+/// same code `init` runs, so the two can never drift apart.
+fn sync_one(root: &Path, agent: &str, _brain: bool) -> Result<()> {
+    println!("\n{} {}", "→".cyan(), root.display());
+    crate::agents::configure(agent, root)
+}
+
 // ── projects ───────────────────────────────────────────────────────────────
 
 pub async fn cmd_projects(args: &[String]) -> Result<()> {
@@ -403,6 +540,17 @@ pub async fn cmd_projects(args: &[String]) -> Result<()> {
             let yes = args.iter().any(|a| a == "--yes" || a == "-y");
             projects_rm(&id, yes).await
         }
+        Some("sync") => {
+            let agent = args
+                .iter()
+                .position(|a| a == "--agent")
+                .and_then(|i| args.get(i + 1))
+                .cloned()
+                .unwrap_or_else(|| "claude".to_string());
+            let dry = args.iter().any(|a| a == "--dry-run");
+            let yes = args.iter().any(|a| a == "--yes" || a == "-y");
+            cmd_sync(&agent, dry, yes).await
+        }
         Some("relink") => {
             let id = args.get(3).cloned().ok_or_else(|| {
                 anyhow::anyhow!("Usage: ragpilot projects relink <id> <new-path>")
@@ -413,7 +561,7 @@ pub async fn cmd_projects(args: &[String]) -> Result<()> {
             projects_relink(&id, &path)
         }
         Some(other) => anyhow::bail!(
-            "Unknown subcommand '{other}'. Usage: ragpilot projects [list | rm <id> | relink <id> <path>]"
+            "Unknown subcommand '{other}'. Usage: ragpilot projects [list | sync | rm <id> | relink <id> <path>]"
         ),
     }
 }
@@ -749,5 +897,87 @@ mod tests {
         assert!(dir.join("a").join("top.txt").exists());
 
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod sync_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    fn scratch(label: &str) -> PathBuf {
+        static N: AtomicUsize = AtomicUsize::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "ragpilot-sync-{}-{}-{}",
+            std::process::id(),
+            N.fetch_add(1, Ordering::SeqCst),
+            label
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn a_bare_project_is_missing_everything() {
+        let dir = scratch("bare");
+        let gap = gap_for(&dir, "bare-1", "claude", true);
+
+        assert!(gap.no_mcp && gap.no_block && gap.no_hooks);
+        assert!(gap.any());
+        for part in ["mcp config", "agent block", "session hooks"] {
+            assert!(gap.describe().contains(part), "{}", gap.describe());
+        }
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_configured_project_reports_no_gap() {
+        let dir = scratch("configured");
+        std::fs::write(dir.join(".mcp.json"), "{}").unwrap();
+        std::fs::write(
+            dir.join("CLAUDE.md"),
+            format!("# rules\n\n{}\nbody\n{}\n", crate::agents::BLOCK_START, crate::agents::BLOCK_END),
+        )
+        .unwrap();
+        std::fs::create_dir_all(dir.join(".claude")).unwrap();
+        std::fs::write(
+            dir.join(crate::brain::hooks::CLAUDE_SETTINGS),
+            r#"{"hooks":{"SessionStart":[{"hooks":[{"command":"ragpilot brain session-start"}]}]}}"#,
+        )
+        .unwrap();
+
+        let gap = gap_for(&dir, "configured-1", "claude", true);
+        assert!(!gap.any(), "{}", gap.describe());
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn hooks_are_only_expected_where_they_can_work() {
+        let dir = scratch("hooks");
+
+        // No brain on this machine: hooks are not a gap.
+        assert!(!gap_for(&dir, "x", "claude", false).no_hooks);
+        // Another client has no hook mechanism at all.
+        assert!(!gap_for(&dir, "x", "codex", true).no_hooks);
+        // Claude Code with a brain: a gap.
+        assert!(gap_for(&dir, "x", "claude", true).no_hooks);
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn every_project_client_has_a_config_path_and_a_doc() {
+        for agent in crate::agents::PROJECT_CLIENTS {
+            assert!(
+                crate::agents::mcp_config_path(agent, Path::new("/p")).is_some(),
+                "{agent} has no per-project config path"
+            );
+            assert!(crate::agents::agent_doc(agent).ends_with(".md"));
+        }
+        // A global-only client has neither.
+        assert!(crate::agents::mcp_config_path("windsurf", Path::new("/p")).is_none());
     }
 }

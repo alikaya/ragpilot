@@ -25,6 +25,18 @@ All notable changes to **ragpilot** are documented here. The format is based on
   model cannot argue with. A hand-written dangling link is still reported, which
   is what that check is for.
 
+### Added
+- **`ragpilot projects sync [--agent <a>] [--dry-run]`** — brings every
+  registered project's own files up to date with the installed version: the MCP
+  registration, the marked block in its agent markdown, and the session hooks
+  when a brain exists. New features that live in the binary reach a project on
+  its next MCP start; the ones that live *in the project folder* did not, and
+  the only way to close that was to visit each project by hand. `--dry-run`
+  lists the gaps without writing.
+
+  It calls the same `agents::configure` that `init` does, so the two cannot
+  drift, and every write is idempotent.
+
 ### Changed
 - **Tool descriptions trimmed: ~1940 → ~1570 tokens (19%).** Tool schemas sit in
   the prefix of every single request, so their cost is paid continuously rather
