@@ -6,6 +6,8 @@ All notable changes to **ragpilot** are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-09-03
+
 ### Fixed
 - **Re-registering a project no longer wipes its MCP entry.** `write_json_mcp`
   merged at the top level — other servers and `$schema` survived — but replaced
