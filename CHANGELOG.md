@@ -16,6 +16,19 @@ All notable changes to **ragpilot** are documented here. The format is based on
   everything else in the entry is the user's and is preserved.
 
 ### Added
+- **`ragpilot projects sync --tidy`** — removes an older copy of ragpilot's own
+  doc sitting above the marked block. `upsert_doc` only upgrades a file that is
+  byte-for-byte the shipped doc, so a project carrying an *earlier release* of it
+  got the block appended below — the same policy twice, loaded every session.
+  Nineteen projects here, 64 KB in total.
+
+  It removes the preamble only when it opens with ragpilot's own heading and at
+  least 90% of its lines already appear in the block, and it prints the lines
+  that would be lost before deleting anything. On this machine that was one
+  line: the `.claude/settings.json` reference a fix in 0.6.0 rewrote. Projects
+  whose preamble carries real documentation — an architecture section, a project
+  overview — fall below the threshold and are left alone.
+
 - **`ragpilot projects sync --only <pattern>`** — narrow a sync to the projects
   whose path matches, so a fleet-wide write can be tried on two before it is
   trusted on sixty. Comma-separated patterns are a union; leaving the flag off

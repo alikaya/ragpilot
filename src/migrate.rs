@@ -403,6 +403,9 @@ struct Gap {
     no_block: bool,
     /// A brain exists, but this project has no session hooks.
     no_hooks: bool,
+    /// Bytes of leading text the block already says, and the lines a tidy
+    /// would lose. `None` when there is nothing redundant.
+    redundant: Option<crate::agents::Redundant>,
 }
 
 impl Gap {
@@ -424,7 +427,13 @@ impl Gap {
 /// This is `init`'s project-folder half, run across the fleet. The index, the
 /// registry and the collection are untouched; the only writes are into the
 /// project folders, and every one of them is idempotent.
-pub async fn cmd_sync(agent: &str, only: &[String], dry_run: bool, yes: bool) -> Result<()> {
+pub async fn cmd_sync(
+    agent: &str,
+    only: &[String],
+    tidy: bool,
+    dry_run: bool,
+    yes: bool,
+) -> Result<()> {
     if !crate::agents::PROJECT_CLIENTS.contains(&agent) {
         anyhow::bail!(
             "'{agent}' has no per-project config. Choose one of: {}",
@@ -453,6 +462,7 @@ pub async fn cmd_sync(agent: &str, only: &[String], dry_run: bool, yes: bool) ->
     }
 
     let pending: Vec<&Gap> = gaps.iter().filter(|g| g.any()).collect();
+    let redundant: Vec<&Gap> = gaps.iter().filter(|g| g.redundant.is_some()).collect();
 
     println!(
         "{} {} registered project(s) · {} already current · {} to update",
@@ -464,22 +474,63 @@ pub async fn cmd_sync(agent: &str, only: &[String], dry_run: bool, yes: bool) ->
     if !brain {
         println!("  {} no brain on this machine — session hooks are skipped.", "i".blue());
     }
-    if pending.is_empty() {
+    if !redundant.is_empty() {
+        let bytes: usize = redundant.iter().filter_map(|g| g.redundant.as_ref()).map(|r| r.bytes).sum();
+        println!(
+            "  {} {} project(s) carry an older copy of the same doc above the block ({} KB in total).",
+            if tidy { "→".cyan() } else { "i".blue() },
+            redundant.len(),
+            bytes / 1024
+        );
+        if !tidy {
+            println!("     Remove it with {}", "--tidy".bold());
+        }
+    }
+
+    if pending.is_empty() && !(tidy && !redundant.is_empty()) {
         println!("{} Nothing to do.", "✓".green());
         return Ok(());
     }
 
-    println!("\n{}", "─── Missing ─────────────────────────────────────".bold());
-    for gap in &pending {
-        println!("  {} — {}", gap.root.display(), gap.describe().yellow());
+    if !pending.is_empty() {
+        println!("\n{}", "─── Missing ─────────────────────────────────────".bold());
+        for gap in &pending {
+            println!("  {} — {}", gap.root.display(), gap.describe().yellow());
+        }
+    }
+
+    if tidy && !redundant.is_empty() {
+        // Nothing is deleted before the user has seen exactly what goes. The
+        // lines below are the ones the block does *not* already contain.
+        let mut lost: Vec<String> = redundant
+            .iter()
+            .filter_map(|g| g.redundant.as_ref())
+            .flat_map(|r| r.lost.clone())
+            .collect();
+        lost.sort();
+        lost.dedup();
+
+        println!("\n{}", "─── Lines a tidy would remove ───────────────────".bold());
+        if lost.is_empty() {
+            println!("  none — the block already says everything above it.");
+        } else {
+            for line in lost.iter().take(20) {
+                println!("  {}", line.dimmed());
+            }
+            if lost.len() > 20 {
+                println!("  … and {} more", lost.len() - 20);
+            }
+        }
     }
 
     if dry_run {
-        let only_flag = if only.is_empty() { String::new() } else { format!(" --only {}", only.join(",")) };
-        println!(
-            "\n  Apply with: {}",
-            format!("ragpilot projects sync --agent {agent}{only_flag}").bold()
-        );
+        // The hint has to be the command that does what was just described,
+        // flags and all — otherwise running it does something else.
+        let mut flags = String::new();
+        if agent != "claude" { flags.push_str(&format!(" --agent {agent}")); }
+        if !only.is_empty() { flags.push_str(&format!(" --only {}", only.join(","))); }
+        if tidy { flags.push_str(" --tidy"); }
+        println!("\n  Apply with: {}", format!("ragpilot projects sync{flags}").bold());
         return Ok(());
     }
     println!(
@@ -502,8 +553,26 @@ pub async fn cmd_sync(agent: &str, only: &[String], dry_run: bool, yes: bool) ->
         }
     }
 
+    let mut tidied = 0usize;
+    if tidy {
+        for gap in &redundant {
+            let doc = gap.root.join(crate::agents::agent_doc(agent));
+            match crate::agents::drop_preamble(&doc) {
+                Ok(0) => {}
+                Ok(bytes) => {
+                    println!("  {} {} (−{} bytes)", "✓".green(), doc.display(), bytes);
+                    tidied += 1;
+                }
+                Err(e) => println!("  {} {}: {e}", "✗".red(), doc.display()),
+            }
+        }
+    }
+
     println!("\n{}", "─── Result ──────────────────────────────────────".bold());
     println!("  updated: {done}/{}", pending.len());
+    if tidy {
+        println!("  tidied:  {tidied}/{}", redundant.len());
+    }
     if !failed.is_empty() {
         println!("  {} {}", "failed:".red(), failed.join(", "));
     }
@@ -538,7 +607,11 @@ fn gap_for(root: &Path, id: &str, agent: &str, brain: bool) -> Gap {
             .map(|text| !text.contains("brain session-start"))
             .unwrap_or(true);
 
-    Gap { root: root.to_path_buf(), id: id.to_string(), no_mcp, no_block, no_hooks }
+    let redundant = std::fs::read_to_string(&doc)
+        .ok()
+        .and_then(|text| crate::agents::redundant_preamble(&text));
+
+    Gap { root: root.to_path_buf(), id: id.to_string(), no_mcp, no_block, no_hooks, redundant }
 }
 
 /// One project. `agents::configure` already writes the MCP config, maintains
@@ -576,7 +649,8 @@ pub async fn cmd_projects(args: &[String]) -> Result<()> {
                 .unwrap_or_default();
             let dry = args.iter().any(|a| a == "--dry-run");
             let yes = args.iter().any(|a| a == "--yes" || a == "-y");
-            cmd_sync(&agent, &only, dry, yes).await
+            let tidy = args.iter().any(|a| a == "--tidy");
+            cmd_sync(&agent, &only, tidy, dry, yes).await
         }
         Some("relink") => {
             let id = args.get(3).cloned().ok_or_else(|| {

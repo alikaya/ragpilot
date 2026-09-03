@@ -379,6 +379,66 @@ fn upsert_doc(path: &Path, body: &str, display: &str) -> Result<()> {
     Ok(())
 }
 
+/// The heading that opens the doc ragpilot ships. Text above the block that
+/// starts with this is an older copy of our own doc, not the user's writing.
+const DOC_SENTINEL: &str = "# AGENT EXECUTION POLICY";
+
+/// Share of the leading text that must already appear inside the block before
+/// it can be called redundant. Not 100%: a copy from an earlier release differs
+/// by whatever we have since changed — the real files differ by exactly the one
+/// line a fix in 0.6.0 rewrote.
+const REDUNDANT_THRESHOLD: f64 = 0.9;
+
+/// Text above the block that the block already says, and the lines it does not.
+pub struct Redundant {
+    /// Bytes that would be removed.
+    pub bytes: usize,
+    /// Substantive lines that appear above but NOT inside the block. These are
+    /// what a tidy would actually lose, so they are shown before anything is
+    /// deleted.
+    pub lost: Vec<String>,
+}
+
+/// Whether the text above the ragpilot block is an older copy of the same doc.
+///
+/// Answers `None` for a file with no block, no leading text, or leading text
+/// that is the user's own writing — those are never touched.
+pub fn redundant_preamble(text: &str) -> Option<Redundant> {
+    let start = text.find(BLOCK_START)?;
+    let (top, block) = (&text[..start], &text[start..]);
+    if !top.trim_start().starts_with(DOC_SENTINEL) {
+        return None;
+    }
+
+    let block_lines: std::collections::HashSet<String> = substantive(block).into_iter().collect();
+    let top_lines = substantive(top);
+    if top_lines.is_empty() {
+        return None;
+    }
+
+    let lost: Vec<String> = top_lines.iter().filter(|l| !block_lines.contains(*l)).cloned().collect();
+    let overlap = 1.0 - (lost.len() as f64 / top_lines.len() as f64);
+    (overlap >= REDUNDANT_THRESHOLD).then(|| Redundant { bytes: top.len(), lost })
+}
+
+/// Remove the redundant preamble, leaving the block as the whole file.
+pub fn drop_preamble(path: &Path) -> Result<usize> {
+    let text = std::fs::read_to_string(path)?;
+    let Some(found) = redundant_preamble(&text) else { return Ok(0) };
+    let start = text.find(BLOCK_START).expect("checked above");
+    std::fs::write(path, &text[start..])?;
+    Ok(found.bytes)
+}
+
+/// Lines worth comparing: whitespace collapsed, comments dropped, and anything
+/// too short to distinguish one document from another ignored.
+fn substantive(text: &str) -> Vec<String> {
+    text.lines()
+        .map(|l| l.split_whitespace().collect::<Vec<_>>().join(" "))
+        .filter(|l| l.len() > 12 && !l.starts_with("<!--"))
+        .collect()
+}
+
 /// Byte range of a complete `start … end` marker pair, if there is one.
 fn block_span(text: &str) -> Option<(usize, usize)> {
     let start = text.find(BLOCK_START)?;
@@ -565,5 +625,78 @@ mod merge_tests {
         assert_eq!(merge_entry(None, &server_entry(true)), server_entry(true));
         // A non-object entry is replaced rather than merged into.
         assert_eq!(merge_entry(Some(&json!("garbage")), &server_entry(true)), server_entry(true));
+    }
+}
+
+#[cfg(test)]
+mod preamble_tests {
+    use super::*;
+
+    /// The shipped policy, as a body of distinguishable lines. Real files carry
+    /// ~68 of these, which is why one changed line is far below the threshold.
+    fn body(marker: &str) -> String {
+        let mut out = format!("# AGENT EXECUTION POLICY — RAG-FIRST\n");
+        for i in 0..20 {
+            out.push_str(&format!("Rule {i}: discovery goes through the MCP server, never a broad read.\n"));
+        }
+        out.push_str(&format!("It is registered in `{marker}` for this project.\n"));
+        out
+    }
+
+    fn doc(top: &str) -> String {
+        format!("{top}{}\n{}{}\n", BLOCK_START, body(".mcp.json"), BLOCK_END)
+    }
+
+    #[test]
+    fn an_older_copy_of_our_own_doc_is_redundant() {
+        // Differs by the one line a later release rewrote — the shape found
+        // across nineteen real projects, where 67 of 68 lines matched.
+        let old = format!("{}\n", body(".claude/settings.json"));
+        let found = redundant_preamble(&doc(&old)).expect("should be redundant");
+
+        assert_eq!(found.bytes, old.len());
+        assert_eq!(found.lost.len(), 1, "{:?}", found.lost);
+        assert!(found.lost[0].contains(".claude/settings.json"));
+    }
+
+    #[test]
+    fn the_users_own_writing_is_never_redundant() {
+        // A different opening heading: not our doc, never touched.
+        let mine = "# Team rules\nNever force-push to main under any circumstances.\n\n";
+        assert!(redundant_preamble(&doc(mine)).is_none());
+
+        // Our sentinel, but the body has been rewritten — below the threshold.
+        let mut rewritten = String::from("# AGENT EXECUTION POLICY — RAG-FIRST\n");
+        for i in 0..20 {
+            rewritten.push_str(&format!("Our own rule {i}: prefer grep, ignore the index entirely.\n"));
+        }
+        assert!(redundant_preamble(&doc(&rewritten)).is_none());
+    }
+
+    #[test]
+    fn a_file_with_nothing_above_the_block_is_left_alone() {
+        assert!(redundant_preamble(&doc("")).is_none());
+        assert!(redundant_preamble("no block at all here").is_none());
+    }
+
+    #[test]
+    fn dropping_the_preamble_keeps_the_block_intact() {
+        let dir = std::env::temp_dir().join(format!("ragpilot-preamble-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("CLAUDE.md");
+
+        let old = format!("{}\n", body(".claude/settings.json"));
+        std::fs::write(&path, doc(&old)).unwrap();
+
+        assert_eq!(drop_preamble(&path).unwrap(), old.len());
+
+        let after = std::fs::read_to_string(&path).unwrap();
+        assert!(after.starts_with(BLOCK_START));
+        assert!(after.contains("`.mcp.json`"));
+        assert!(!after.contains("settings.json"), "the stale line survived");
+        // Idempotent: nothing left to drop.
+        assert_eq!(drop_preamble(&path).unwrap(), 0);
+
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }
