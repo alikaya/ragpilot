@@ -1032,6 +1032,6 @@ mod only_tests {
         assert!(!matches_only("/home/a/Projects/Web/Orilyon", &f));
 
         // A directory segment works as well as a project name.
-        assert!(matches_only("/home/a/Projects/Web/Orilyon", &vec!["/web/".to_string()]));
+        assert!(matches_only("/home/a/Projects/Web/Orilyon", &["/web/".to_string()]));
     }
 }
