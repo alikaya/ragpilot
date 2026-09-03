@@ -6,6 +6,13 @@ All notable changes to **ragpilot** are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- **`ragpilot projects sync --only <pattern>`** — narrow a sync to the projects
+  whose path matches, so a fleet-wide write can be tried on two before it is
+  trusted on sixty. Comma-separated patterns are a union; leaving the flag off
+  still means every project, because narrowing should be something you ask for
+  rather than something you get by forgetting a flag.
+
 ## [0.7.1] — 2026-09-01
 
 ### Fixed

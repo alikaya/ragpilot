@@ -424,7 +424,7 @@ impl Gap {
 /// This is `init`'s project-folder half, run across the fleet. The index, the
 /// registry and the collection are untouched; the only writes are into the
 /// project folders, and every one of them is idempotent.
-pub async fn cmd_sync(agent: &str, dry_run: bool, yes: bool) -> Result<()> {
+pub async fn cmd_sync(agent: &str, only: &[String], dry_run: bool, yes: bool) -> Result<()> {
     if !crate::agents::PROJECT_CLIENTS.contains(&agent) {
         anyhow::bail!(
             "'{agent}' has no per-project config. Choose one of: {}",
@@ -438,11 +438,19 @@ pub async fn cmd_sync(agent: &str, dry_run: bool, yes: bool) -> Result<()> {
     let gaps: Vec<Gap> = registry
         .projects
         .iter()
+        .filter(|(path, _)| matches_only(path, only))
         .filter_map(|(path, entry)| {
             let root = PathBuf::from(path);
             root.is_dir().then(|| gap_for(&root, &entry.id, agent, brain))
         })
         .collect();
+
+    if gaps.is_empty() && !only.is_empty() {
+        anyhow::bail!(
+            "No registered project matches {:?}. `ragpilot projects list` shows the paths.",
+            only
+        );
+    }
 
     let pending: Vec<&Gap> = gaps.iter().filter(|g| g.any()).collect();
 
@@ -467,9 +475,10 @@ pub async fn cmd_sync(agent: &str, dry_run: bool, yes: bool) -> Result<()> {
     }
 
     if dry_run {
+        let only_flag = if only.is_empty() { String::new() } else { format!(" --only {}", only.join(",")) };
         println!(
             "\n  Apply with: {}",
-            format!("ragpilot projects sync --agent {agent}").bold()
+            format!("ragpilot projects sync --agent {agent}{only_flag}").bold()
         );
         return Ok(());
     }
@@ -499,6 +508,18 @@ pub async fn cmd_sync(agent: &str, dry_run: bool, yes: bool) -> Result<()> {
         println!("  {} {}", "failed:".red(), failed.join(", "));
     }
     Ok(())
+}
+
+/// Case-insensitive substring match against the project path. An empty filter
+/// matches everything — writing into every project should be what you asked
+/// for, not what you get by leaving a flag off, so `--only` narrows rather than
+/// being required.
+fn matches_only(path: &str, only: &[String]) -> bool {
+    if only.is_empty() {
+        return true;
+    }
+    let path = path.to_lowercase();
+    only.iter().any(|pattern| path.contains(&pattern.to_lowercase()))
 }
 
 fn gap_for(root: &Path, id: &str, agent: &str, brain: bool) -> Gap {
@@ -547,9 +568,15 @@ pub async fn cmd_projects(args: &[String]) -> Result<()> {
                 .and_then(|i| args.get(i + 1))
                 .cloned()
                 .unwrap_or_else(|| "claude".to_string());
+            let only: Vec<String> = args
+                .iter()
+                .position(|a| a == "--only")
+                .and_then(|i| args.get(i + 1))
+                .map(|v| v.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect())
+                .unwrap_or_default();
             let dry = args.iter().any(|a| a == "--dry-run");
             let yes = args.iter().any(|a| a == "--yes" || a == "-y");
-            cmd_sync(&agent, dry, yes).await
+            cmd_sync(&agent, &only, dry, yes).await
         }
         Some("relink") => {
             let id = args.get(3).cloned().ok_or_else(|| {
@@ -979,5 +1006,32 @@ mod sync_tests {
         }
         // A global-only client has neither.
         assert!(crate::agents::mcp_config_path("windsurf", Path::new("/p")).is_none());
+    }
+}
+
+#[cfg(test)]
+mod only_tests {
+    use super::*;
+
+    #[test]
+    fn an_empty_filter_matches_everything() {
+        // Leaving the flag off must not silently narrow the run.
+        assert!(matches_only("/home/a/Projects/anything", &[]));
+    }
+
+    #[test]
+    fn only_matches_a_case_insensitive_substring_of_the_path() {
+        let f = vec!["bitigdb".to_string()];
+        assert!(matches_only("/home/a/Projects/Desktop/BitigDB", &f));
+        assert!(!matches_only("/home/a/Projects/Desktop/PosPC", &f));
+
+        // Several patterns are a union, not an intersection.
+        let f = vec!["bitigdb".to_string(), "pospc".to_string()];
+        assert!(matches_only("/home/a/Projects/Desktop/BitigDB", &f));
+        assert!(matches_only("/home/a/Projects/Desktop/PosPC", &f));
+        assert!(!matches_only("/home/a/Projects/Web/Orilyon", &f));
+
+        // A directory segment works as well as a project name.
+        assert!(matches_only("/home/a/Projects/Web/Orilyon", &vec!["/web/".to_string()]));
     }
 }
