@@ -487,7 +487,8 @@ pub async fn cmd_sync(
         }
     }
 
-    if pending.is_empty() && !(tidy && !redundant.is_empty()) {
+    let nothing_to_tidy = !tidy || redundant.is_empty();
+    if pending.is_empty() && nothing_to_tidy {
         println!("{} Nothing to do.", "✓".green());
         return Ok(());
     }

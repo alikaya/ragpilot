@@ -418,7 +418,7 @@ pub fn redundant_preamble(text: &str) -> Option<Redundant> {
 
     let lost: Vec<String> = top_lines.iter().filter(|l| !block_lines.contains(*l)).cloned().collect();
     let overlap = 1.0 - (lost.len() as f64 / top_lines.len() as f64);
-    (overlap >= REDUNDANT_THRESHOLD).then(|| Redundant { bytes: top.len(), lost })
+    (overlap >= REDUNDANT_THRESHOLD).then_some(Redundant { bytes: top.len(), lost })
 }
 
 /// Remove the redundant preamble, leaving the block as the whole file.
@@ -635,7 +635,7 @@ mod preamble_tests {
     /// The shipped policy, as a body of distinguishable lines. Real files carry
     /// ~68 of these, which is why one changed line is far below the threshold.
     fn body(marker: &str) -> String {
-        let mut out = format!("# AGENT EXECUTION POLICY — RAG-FIRST\n");
+        let mut out = String::from("# AGENT EXECUTION POLICY — RAG-FIRST\n");
         for i in 0..20 {
             out.push_str(&format!("Rule {i}: discovery goes through the MCP server, never a broad read.\n"));
         }
