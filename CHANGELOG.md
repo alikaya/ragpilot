@@ -6,6 +6,15 @@ All notable changes to **ragpilot** are documented here. The format is based on
 
 ## [Unreleased]
 
+### Fixed
+- **Re-registering a project no longer wipes its MCP entry.** `write_json_mcp`
+  merged at the top level — other servers and `$schema` survived — but replaced
+  the ragpilot entry itself wholesale, destroying any key ragpilot does not
+  write. A fleet-wide `projects sync` therefore deleted the `env` block carrying
+  the enterprise reporting credentials, and reporting stopped for two days
+  without one error message. Ragpilot now owns `type`, `command` and `args`;
+  everything else in the entry is the user's and is preserved.
+
 ### Added
 - **`ragpilot projects sync --only <pattern>`** — narrow a sync to the projects
   whose path matches, so a fleet-wide write can be tried on two before it is

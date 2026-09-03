@@ -248,8 +248,14 @@ fn write_json_mcp(
         }
     }
 
+    // How the server is launched is ours; everything else in the entry is the
+    // user's. `env` in particular carries the enterprise reporting credentials
+    // on a dev machine, and replacing the entry wholesale silently switched
+    // reporting off — which is exactly the kind of failure nobody notices.
     let current_ptr = format!("/{root_key}/ragpilot");
-    let up_to_date = doc.pointer(&current_ptr) == Some(&entry);
+    let existing = doc.pointer(&current_ptr).cloned();
+    let merged = merge_entry(existing.as_ref(), &entry);
+    let up_to_date = existing.as_ref() == Some(&merged);
 
     if exists && up_to_date && !had_legacy {
         println!("{} {} (ragpilot already registered)", "i".blue(), display);
@@ -259,7 +265,7 @@ fn write_json_mcp(
     if !doc.get(root_key).map(Value::is_object).unwrap_or(false) {
         doc[root_key] = json!({});
     }
-    doc[root_key]["ragpilot"] = entry;
+    doc[root_key]["ragpilot"] = merged;
     std::fs::write(path, serde_json::to_string_pretty(&doc)?)?;
 
     if !exists {
@@ -270,6 +276,36 @@ fn write_json_mcp(
         println!("{} {} (ragpilot added)", "✓".green(), display);
     }
     Ok(())
+}
+
+/// Keys ragpilot owns in a server entry: how the process is started. Anything
+/// else the user put there — `env`, `cwd`, a timeout — is theirs to keep.
+const OWNED_KEYS: &[&str] = &["type", "command", "args"];
+
+/// Overlay the launch keys onto whatever is already registered.
+///
+/// Without this, re-registering a project throws away every key ragpilot does
+/// not write itself. It did: a fleet-wide `projects sync` deleted the `env`
+/// block carrying the enterprise reporting token, and reporting stopped without
+/// a single error.
+fn merge_entry(existing: Option<&Value>, ours: &Value) -> Value {
+    let (Some(Value::Object(existing)), Value::Object(ours)) = (existing, ours) else {
+        return ours.clone();
+    };
+
+    let mut merged = existing.clone();
+    for key in OWNED_KEYS {
+        match ours.get(*key) {
+            Some(value) => {
+                merged.insert((*key).to_string(), value.clone());
+            }
+            // A client whose entry omits `type` should not inherit a stale one.
+            None => {
+                merged.remove(*key);
+            }
+        }
+    }
+    Value::Object(merged)
 }
 
 /// Append the brain convention to an agent doc when a brain exists.
@@ -477,5 +513,57 @@ mod tests {
         for client in PROJECT_CLIENTS {
             assert!(!GLOBAL_CLIENTS.contains(client), "{client} is in both lists");
         }
+    }
+}
+
+#[cfg(test)]
+mod merge_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn re_registering_keeps_what_the_user_put_in_the_entry() {
+        // The shape that broke: a dev machine carrying reporting credentials.
+        let existing = json!({
+            "type": "stdio",
+            "command": "ragpilot",
+            "args": ["--mcp-server"],
+            "env": { "RAGPILOT_ENT_API": "http://127.0.0.1:8787", "RAGPILOT_ENT_AUDIT_ACTIONS": "1" },
+            "timeout": 30
+        });
+        let merged = merge_entry(Some(&existing), &server_entry(true));
+
+        assert_eq!(merged["env"]["RAGPILOT_ENT_API"], "http://127.0.0.1:8787");
+        assert_eq!(merged["timeout"], 30);
+        // …and the launch keys are still ours.
+        assert_eq!(merged["command"], "ragpilot");
+        assert_eq!(merged["args"], json!(["--mcp-server"]));
+    }
+
+    #[test]
+    fn the_launch_keys_are_overwritten_not_merged() {
+        let stale = json!({ "command": "rag", "args": ["--old-flag"], "env": { "KEEP": "1" } });
+        let merged = merge_entry(Some(&stale), &server_entry(true));
+
+        assert_eq!(merged["command"], "ragpilot");
+        assert_eq!(merged["args"], json!(["--mcp-server"]));
+        assert_eq!(merged["env"]["KEEP"], "1");
+    }
+
+    #[test]
+    fn a_client_without_type_does_not_inherit_a_stale_one() {
+        let existing = json!({ "type": "stdio", "command": "ragpilot", "env": { "KEEP": "1" } });
+        // cursor's entry carries no `type`.
+        let merged = merge_entry(Some(&existing), &server_entry(false));
+
+        assert!(merged.get("type").is_none(), "{merged}");
+        assert_eq!(merged["env"]["KEEP"], "1");
+    }
+
+    #[test]
+    fn nothing_registered_yet_is_just_our_entry() {
+        assert_eq!(merge_entry(None, &server_entry(true)), server_entry(true));
+        // A non-object entry is replaced rather than merged into.
+        assert_eq!(merge_entry(Some(&json!("garbage")), &server_entry(true)), server_entry(true));
     }
 }
