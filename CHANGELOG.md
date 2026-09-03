@@ -6,6 +6,8 @@ All notable changes to **ragpilot** are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.7.1] — 2026-09-01
+
 ### Fixed
 - **A thread stamp fed back into itself.** `session-start` prints open threads
   with their `(opened …)` stamp, that lands in the transcript, and `session-end`
