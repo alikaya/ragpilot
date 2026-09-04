@@ -165,6 +165,12 @@ Add to `.claude/settings.json`:
 | `ragpilot migrate --scan <dir>` | Inventory every legacy project under a directory (read-only) |
 | `ragpilot migrate --all <dir>` | Migrate all of them |
 | `ragpilot projects list\|rm\|relink` | Manage registered projects |
+| `ragpilot projects sync` | Bring every registered project's agent files up to date — see below |
+| `ragpilot paths` | Print where this project's data lives |
+| `ragpilot dashboard [--open]` | Local dashboard: projects + brain — see below |
+| `ragpilot stats` | Tokens the last `context_bundle` calls saved |
+| `ragpilot skeleton <file>` | Print a token-efficient skeleton of a file |
+| `ragpilot review [<ref>]` | Semantic diff: which symbols changed and what they reach |
 | `ragpilot brain <subcommand>` | The second brain — see [docs/brain.md](docs/brain.md) |
 | `ragpilot doctor` | Check installation and configuration |
 | `ragpilot --mcp-server` | Start the MCP server over stdio |
@@ -194,12 +200,14 @@ AI agents use these tools automatically:
 | `rag_search` | Semantic code search (filter by: path, language, extension) |
 | `rag_get_chunks` | Retrieve full content by chunk ID |
 | `rag_get_file_ranges` | Read specific line ranges or symbol definitions |
+| `rag_get_skeleton` | File structure — signatures without bodies |
 | `rag_index_status` | Index status and dirty file count |
 | `rag_ensure_index` | Re-index changed files |
 | `nav_symbol_resolve` | Symbol definition + call graph |
 | `nav_call_graph` | BFS call tree (incoming + outgoing) |
 | `impact_analyze` | Pre-refactor impact analysis |
 | `context_bundle` | Token-budgeted complete context bundle |
+| `review_semantic_diff` | Changed symbols in a diff + their blast radius |
 | `brain_load` | Second-brain context for the start of a session |
 | `brain_search` | Semantic search across the second brain |
 | `brain_note` | Record a decision or a fact, searchable immediately |
@@ -229,6 +237,34 @@ ragpilot projects list                       # every registered project
 ragpilot projects relink <id> <new-path>     # after moving a folder
 ragpilot projects rm <id>                    # unregister + delete its data
 ```
+
+### Keeping projects up to date
+
+A release that adds a tool or changes the agent instructions leaves every
+project you already set up a version behind. `projects sync` closes that gap
+without visiting them one by one:
+
+```bash
+ragpilot projects sync --dry-run     # what is missing, and where
+ragpilot projects sync               # fix it
+```
+
+It walks the registry and, per project, restores a missing MCP entry, refreshes
+the marked block in the agent file and installs the session hooks when a brain
+exists. It runs the same code `init` does, so the two cannot drift apart. Your
+own edits are left alone: the MCP entry keeps every key RagPilot does not own —
+`env` in particular — and only the marked block in the agent file is rewritten.
+
+```bash
+ragpilot projects sync --only api,web     # substring match on the path
+ragpilot projects sync --agent codex      # default is claude
+ragpilot projects sync --tidy             # also drop preamble the block repeats
+```
+
+`--tidy` is opt-in and conservative. Some agent files open with a paragraph
+explaining RagPilot that the managed block below now says better; where that
+text is **provably** redundant, `--tidy` removes it and prints every line it
+would delete first. Without the flag you are only told it is there.
 
 ### Upgrading a `.rag/` project
 
