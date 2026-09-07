@@ -114,13 +114,26 @@ pub async fn cmd_session_end(
         return Ok(());
     }
 
-    let Some(path) = transcript.or_else(transcript_from_stdin) else {
-        eprintln!("ragpilot: no transcript path given — nothing to flush.");
-        return Ok(());
+    // An explicit --transcript means someone asked for the work directly, on
+    // the command line or from the worker below, and wants it done here. A
+    // path arriving on stdin means we are a hook, and a hook has no time.
+    let (path, from_hook) = match transcript {
+        Some(path) => (path, false),
+        None => match transcript_from_stdin() {
+            Some(path) => (path, true),
+            None => {
+                eprintln!("ragpilot: no transcript path given — nothing to flush.");
+                return Ok(());
+            }
+        },
     };
     if !path.exists() {
         eprintln!("ragpilot: transcript {} does not exist.", path.display());
         return Ok(());
+    }
+
+    if from_hook {
+        return hand_off(&path, engine_override);
     }
 
     let mut state = SessionState::load();
@@ -211,6 +224,47 @@ async fn summarise(
 /// Hook payloads arrive as JSON on stdin; `transcript_path` is the field we
 /// need. Absent or unparseable stdin is not an error — the flag may have been
 /// used instead.
+/// Re-run ourselves in the background and return at once.
+///
+/// Claude Code does not wait for a SessionEnd hook — it cancels whatever is
+/// still running when the session goes away, and it is not a matter of
+/// timeout: a plain `sleep 2` is killed too. Summarising takes a model call,
+/// on the order of ten seconds, so a hook that does the work inline never
+/// finishes. It hands the work to a process of its own instead.
+///
+/// The transcript path is resolved before the hand-off because it arrives on
+/// stdin, which only the hook has. The worker gets it as `--transcript` and so
+/// takes the direct path above; it cannot hand off again.
+///
+/// Nobody is watching the worker's output, so it is discarded. A failure still
+/// leaves the miss marker, which the next `session-start` reports.
+fn hand_off(path: &Path, engine_override: Option<&str>) -> Result<()> {
+    let exe = std::env::current_exe().context("cannot find the ragpilot binary to hand off to")?;
+
+    let mut cmd = std::process::Command::new(exe);
+    cmd.arg("brain")
+        .arg("session-end")
+        .arg("--transcript")
+        .arg(path);
+    if let Some(engine) = engine_override {
+        cmd.arg("--engine").arg(engine);
+    }
+    cmd.stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+
+    // Its own process group, so that killing the hook's group on the way out
+    // does not take the worker with it.
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
+
+    cmd.spawn().context("cannot start the background flush")?;
+    Ok(())
+}
+
 fn transcript_from_stdin() -> Option<PathBuf> {
     use std::io::{IsTerminal, Read};
 
