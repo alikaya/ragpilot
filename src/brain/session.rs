@@ -71,6 +71,11 @@ fn take_miss() -> Option<String> {
 /// Print the opening package. Stdout is the contract: Claude Code injects it,
 /// and a human reading it sees the same thing.
 pub fn cmd_session_start(max_tokens: Option<usize>) -> Result<()> {
+    if super::in_compiler_subprocess() {
+        // Handing the brain to the summariser would only make it summarise
+        // that, and `take_miss` below would eat the marker on the way past.
+        return Ok(());
+    }
     if !super::exists() {
         // A missing brain must not make a session fail to start.
         eprintln!("ragpilot: no brain yet — run `ragpilot brain init` to set one up.");
@@ -101,6 +106,10 @@ pub async fn cmd_session_end(
     transcript: Option<PathBuf>,
     engine_override: Option<&str>,
 ) -> Result<()> {
+    if super::in_compiler_subprocess() {
+        // The summariser does not summarise itself.
+        return Ok(());
+    }
     if !super::exists() {
         return Ok(());
     }

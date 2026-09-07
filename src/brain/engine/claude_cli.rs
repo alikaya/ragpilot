@@ -63,6 +63,9 @@ impl CompilerEngine for ClaudeCliEngine {
             .arg("text")
             .arg("--append-system-prompt")
             .arg(req.system)
+            // This child is an agent session and inherits the project's hooks.
+            // The mark tells them they are running inside the compiler.
+            .env(crate::brain::HOOK_GUARD_ENV, "1")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())

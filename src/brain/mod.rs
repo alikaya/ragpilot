@@ -72,6 +72,25 @@ pub fn takeout_dir() -> PathBuf { dir().join("archive").join("takeout") }
 /// Whether a brain has been set up on this machine.
 pub fn exists() -> bool { config_path().exists() }
 
+/// Marks the compiler's own subprocess, so the brain hooks can recognise it.
+pub const HOOK_GUARD_ENV: &str = "RAGPILOT_BRAIN_HOOK";
+
+/// True inside the subprocess the compiler spawned.
+///
+/// The compiler summarises by running `claude -p`, which is itself an agent
+/// session: in a project with the brain hooks installed it inherits them and
+/// fires `session-start` on the way in and `session-end` on the way out. The
+/// summariser would summarise itself, one level down, on every session.
+///
+/// It never got that far in practice — `claude -p` does not wait for its
+/// SessionEnd hooks, so the nested one was killed mid-flight and reported as
+/// "Hook cancelled". That still cost an LLM call per session end, and the
+/// nested `session-start` was worse: it consumes the miss marker, so a warning
+/// meant for the next session was swallowed by a subprocess instead.
+pub fn in_compiler_subprocess() -> bool {
+    std::env::var_os(HOOK_GUARD_ENV).is_some()
+}
+
 // ── init ───────────────────────────────────────────────────────────────────
 
 pub async fn cmd_init(engine_override: Option<&str>) -> Result<()> {
