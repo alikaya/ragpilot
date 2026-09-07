@@ -1,0 +1,7 @@
+# Build context for packaging/Dockerfile.ubuntu2204. target/ alone is 20G;
+# without this the context upload dwarfs the build.
+target/
+.git/
+dist/
+benchmark/results*
+*.tar.gz

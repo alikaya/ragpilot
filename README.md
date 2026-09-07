@@ -60,8 +60,8 @@ Measured on two codebases with the local `bge-small` model:
 
 ## Requirements
 
-- Rust 1.75+
 - [Qdrant](https://qdrant.tech) vector database
+- Rust 1.75+ — only to build from source; the Linux tarball needs no toolchain
 
 ```bash
 # Start Qdrant with Docker
@@ -71,6 +71,35 @@ docker run -d -p 6334:6334 qdrant/qdrant
 ---
 
 ## Installation
+
+### Ubuntu 22.04+ / Debian (prebuilt binary)
+
+No Rust toolchain, no compile. Download the tarball for your release and:
+
+```bash
+tar -xzf ragpilot-0.8.0-x86_64-linux-gnu.tar.gz
+cd ragpilot-0.8.0-x86_64-linux-gnu
+./install.sh
+```
+
+It lands in `/usr/local/bin` when you have the rights for it and in
+`~/.local/bin` when you do not, so `sudo` is optional rather than assumed. The
+installer checks the architecture and your glibc before copying anything, then
+runs the binary once to prove the install worked, and tells you about anything
+still missing — a `PATH` that does not include the target directory, or a
+Qdrant that is not answering yet.
+
+```bash
+./install.sh --prefix /opt/ragpilot   # somewhere else
+./install.sh --uninstall              # remove the binary, keep your data
+```
+
+Requires x86_64 and glibc 2.35 or newer — Ubuntu 22.04, Debian 12, and
+everything after them. On anything older or on ARM, install from source.
+
+To build the tarball yourself, see [packaging/](packaging/): one script, and
+the compile happens inside `ubuntu:22.04` so the result cannot pick up a newer
+glibc than the target has.
 
 ### From crates.io
 

@@ -1,0 +1,29 @@
+# Build ragpilot against Ubuntu 22.04's glibc (2.35).
+#
+# A binary linked on a newer host does not start on 22.04 — it fails at exec
+# with "GLIBC_2.3x not found", before any of our code runs. Building inside the
+# target image is the whole point of this file.
+#
+# Driven by packaging/build.sh; do not invoke docker directly.
+
+FROM ubuntu:22.04 AS build
+
+# build-essential + pkg-config: rusqlite is bundled and tree-sitter grammars
+# are C. libssl-dev: reqwest links the system OpenSSL, which is 3.0 here and
+# 3.0 on every 22.04 install, so the runtime dependency is already satisfied.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential pkg-config libssl-dev ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/*
+
+ARG RUST_TOOLCHAIN=stable
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+      | sh -s -- -y --profile minimal --default-toolchain "$RUST_TOOLCHAIN"
+ENV PATH=/root/.cargo/bin:$PATH
+
+WORKDIR /src
+COPY . .
+RUN cargo build --release --locked && strip target/release/ragpilot
+
+# build.sh lifts /out/ragpilot back out with `docker cp`, which works on the
+# legacy builder as well as buildx — one less thing to have installed.
+RUN mkdir -p /out && cp target/release/ragpilot /out/ragpilot

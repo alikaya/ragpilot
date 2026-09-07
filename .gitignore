@@ -26,3 +26,6 @@ CLAUDE.md
 logo-1.png
 ragpilot.desktop
 ChatGPT Image*.png
+
+# Packaging output
+dist/
