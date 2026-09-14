@@ -25,6 +25,7 @@ const LANGUAGES: &[(&str, &[&str])] = &[
     ("ruby",        &["rb"]),
     ("php",         &["php"]),
     ("swift",       &["swift"]),
+    ("lua",         &["lua"]),
     ("dart/flutter", &["dart"]),
     ("web",         &["html", "css", "scss", "vue", "svelte"]),
     ("shell",       &["sh", "bash"]),

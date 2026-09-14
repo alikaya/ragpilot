@@ -306,6 +306,7 @@ pub fn extract_symbol(content: &str, language: &str) -> Option<String> {
         "ruby" => &["def ", "class "],
         "php" => &["function ", "class "],
         "swift" => &["func ", "class ", "struct "],
+        "lua" => &["local function ", "function "],
         _ => return None,
     };
 
@@ -337,6 +338,7 @@ pub fn file_language(extension: &str) -> &'static str {
         "rb" => "ruby",
         "php" => "php",
         "swift" => "swift",
+        "lua" => "lua",
         "dart" => "dart",
         "kt" | "kts" => "kotlin",
         "scala" => "scala",

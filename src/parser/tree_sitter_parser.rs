@@ -161,6 +161,9 @@ fn lang_defs() -> Vec<LangDef> {
         LangDef { name: "php", language: tree_sitter_php::LANGUAGE_PHP.into(),
             extractor: Tags(tree_sitter_php::TAGS_QUERY),
             import: Some((PHP_USE, ModulePath)) },
+        LangDef { name: "lua", language: tree_sitter_lua::LANGUAGE.into(),
+            extractor: Tags(tree_sitter_lua::TAGS_QUERY),
+            import: Some((LUA_USE, ModulePath)) },
     ]
 }
 
@@ -618,6 +621,7 @@ const C_USE: &str = include_str!("../../queries/c/imports.scm");
 const CPP_USE: &str = include_str!("../../queries/cpp/imports.scm");
 const CS_USE: &str = include_str!("../../queries/csharp/imports.scm");
 const PHP_USE: &str = include_str!("../../queries/php/imports.scm");
+const LUA_USE: &str = include_str!("../../queries/lua/imports.scm");
 
 #[cfg(test)]
 mod tests {
@@ -749,6 +753,32 @@ mod tests {
         assert!(has(&p, "Foo", "class"));
         // PHP's tags.scm tags methods as `function` (standard tags taxonomy).
         assert!(has(&p, "bar", "function"));
+    }
+
+    #[test]
+    fn parses_lua() {
+        let src = "local M = {}\n\
+                   local util = require(\"core.util\")\n\
+                   local json = require 'json'\n\
+                   function M.setup(opts)\n  util.merge(opts)\nend\n\
+                   function M:render()\n  self:draw()\nend\n\
+                   local function helper() end\n\
+                   local handler = function() helper() end\n\
+                   return M\n";
+        let p = parse_lang(src, "lua");
+
+        assert!(has(&p, "setup", "function"), "got {:?}", p.symbols);
+        assert!(has(&p, "render", "method"));
+        assert!(has(&p, "helper", "function"));
+        assert!(has(&p, "handler", "function"));
+
+        // Both call forms, dotted path kept whole, leaf is the last segment.
+        let modules: Vec<_> = p.imports.iter().map(|i| (i.from_module.as_str(), i.symbol_name.as_str())).collect();
+        assert!(modules.contains(&("core.util", "util")), "got {modules:?}");
+        assert!(modules.contains(&("json", "json")));
+
+        // Calls feed the call graph: helper() is referenced from handler.
+        assert!(p.calls.iter().any(|c| c.callee_name == "helper"), "got {:?}", p.calls);
     }
 
     #[test]

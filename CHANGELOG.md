@@ -6,6 +6,12 @@ All notable changes to **ragpilot** are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- **Lua.** Tree-sitter symbols and calls through the grammar's own tags query —
+  `function M.f()`, `function obj:m()`, `local function`, functions assigned to
+  locals or table fields — plus a `require` import query covering the call,
+  string and long-string forms. `init` detects `.lua` files and offers them.
+
 ## [0.8.0] — 2026-09-03
 
 ### Fixed

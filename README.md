@@ -20,7 +20,7 @@ Provides tools to AI agents — Claude Code, Codex, Cursor, VS Code, opencode, A
 
 - **Semantic search** — Vector-based code search with Qdrant + fastembed
 - **Symbol graph** — Function/struct/class definitions, import and call relationships
-- **Multi-language parsing** — Tree-sitter symbol & call extraction for Rust, Python, JavaScript, TypeScript, Go, Java, C, C++, C#, Ruby and PHP (regex fallback for other languages); queries live in `queries/<lang>/*.scm` and can be overridden per project
+- **Multi-language parsing** — Tree-sitter symbol & call extraction for Rust, Python, JavaScript, TypeScript, Go, Java, C, C++, C#, Ruby, PHP and Lua (regex fallback for other languages); queries live in `queries/<lang>/*.scm` and can be overridden per project
 - **Impact analysis** — Show which files would be affected before refactoring
 - **Context bundling** — Complete context in a single call with token budgeting
 - **Incremental indexing** — Re-index only changed files

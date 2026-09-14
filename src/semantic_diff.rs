@@ -293,7 +293,7 @@ fn lang_of(path: &str) -> &'static str {
     match crate::indexer::file_language(ext) {
         // Only languages our parsers understand structurally.
         l @ ("rust" | "python" | "javascript" | "typescript" | "go" | "java"
-            | "kotlin" | "scala" | "ruby" | "php" | "swift") => l,
+            | "kotlin" | "scala" | "ruby" | "php" | "swift" | "lua") => l,
         _ => "",
     }
 }
