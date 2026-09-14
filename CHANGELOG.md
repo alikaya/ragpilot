@@ -16,6 +16,13 @@ All notable changes to **ragpilot** are documented here. The format is based on
   `init` offers `.gd`, `.gdshader` and `.gdshaderinc` as one "godot" choice.
   C# and C++ (GDExtension) were already supported.
 
+### Fixed
+- **Impact analysis for Lua found no dependents.** `require("core.util")` was
+  recorded, but a change to `lua/core/util.lua` was looked up with the generic
+  `%lua/core/util.lua%` pattern, which never matches a dotted module name. Lua
+  files now map to every dotted suffix of their path (`lua.core.util`,
+  `core.util`, `util`), with `init.lua` standing for its directory.
+
 ## [0.9.0] — 2026-09-14
 
 ### Fixed

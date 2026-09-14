@@ -205,6 +205,18 @@ fn import_match_patterns(path: &str) -> Vec<String> {
                 vec![format!("%/{}", file), format!("%/{}.{}", file, ext)]
             }
         }
+        "lua" => {
+            // require("core.util") resolves through package.path (`?.lua`,
+            // `?/init.lua`) from a root the index cannot see — `lua/` in a
+            // Neovim config, the project root elsewhere — so every dotted
+            // suffix of the path is a name something could require. A module
+            // directory is required by its own name, not as `<dir>.init`.
+            let mut segs: Vec<&str> = stem.split('/').collect();
+            if segs.len() > 1 && segs.last() == Some(&"init") {
+                segs.pop();
+            }
+            (0..segs.len()).map(|i| segs[i..].join(".")).collect()
+        }
         _ => vec![format!("%{}%", path)],
     }
 }
@@ -240,6 +252,40 @@ mod tests {
         assert!(p.contains(&"app.models%".to_string()));
         let p = import_match_patterns("pkg/__init__.py");
         assert!(p.contains(&"pkg%".to_string()));
+    }
+
+    #[test]
+    fn lua_dotted_module_suffixes() {
+        let p = import_match_patterns("lua/core/util.lua");
+        assert!(p.contains(&"core.util".to_string()), "got {p:?}");
+        assert!(p.contains(&"lua.core.util".to_string()));
+        let p = import_match_patterns("lua/bookmark/init.lua");
+        assert!(p.contains(&"bookmark".to_string()), "got {p:?}");
+        assert!(!p.iter().any(|m| m.ends_with("init")), "got {p:?}");
+    }
+
+    /// The patterns alone passed review while impact lookup for Lua returned
+    /// nothing: the fallback `%lua/core/util.lua%` never matches `core.util`.
+    /// Check the round trip through the real table instead.
+    #[tokio::test]
+    async fn affected_files_resolve_through_the_table() {
+        let dir = std::env::temp_dir().join(format!("ragpilot_impact_{}", std::process::id()));
+        let db = dir.join("stores.db");
+        crate::store::sqlite::SqliteStore::new(db.clone()).unwrap();
+        let idx = super::ImpactIndexStore::new(db);
+
+        idx.update_imports("lua/plugins/ui.lua", &["core.util".into()]).await.unwrap();
+        idx.update_imports("init.lua", &["bookmark".into()]).await.unwrap();
+        idx.update_imports("tests/flight_test.gd", &["res://common/ship.gd".into()]).await.unwrap();
+
+        let got = idx.get_affected(&["lua/core/util.lua".into()]).await.unwrap();
+        assert_eq!(got, vec!["lua/plugins/ui.lua".to_string()]);
+        let got = idx.get_affected(&["lua/bookmark/init.lua".into()]).await.unwrap();
+        assert_eq!(got, vec!["init.lua".to_string()]);
+        let got = idx.get_affected(&["common/ship.gd".into()]).await.unwrap();
+        assert_eq!(got, vec!["tests/flight_test.gd".to_string()]);
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
