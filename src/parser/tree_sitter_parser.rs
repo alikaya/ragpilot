@@ -164,6 +164,12 @@ fn lang_defs() -> Vec<LangDef> {
         LangDef { name: "lua", language: tree_sitter_lua::LANGUAGE.into(),
             extractor: Tags(tree_sitter_lua::TAGS_QUERY),
             import: Some((LUA_USE, ModulePath)) },
+        LangDef { name: "gdscript", language: tree_sitter_gdscript::LANGUAGE.into(),
+            extractor: Tags(GD_TAGS),
+            import: Some((GD_USE, ModulePath)) },
+        LangDef { name: "gdshader", language: tree_sitter_gdshader::LANGUAGE.into(),
+            extractor: Tags(GDSHADER_TAGS),
+            import: Some((GDSHADER_USE, ModulePath)) },
     ]
 }
 
@@ -622,6 +628,10 @@ const CPP_USE: &str = include_str!("../../queries/cpp/imports.scm");
 const CS_USE: &str = include_str!("../../queries/csharp/imports.scm");
 const PHP_USE: &str = include_str!("../../queries/php/imports.scm");
 const LUA_USE: &str = include_str!("../../queries/lua/imports.scm");
+const GD_TAGS: &str = include_str!("../../queries/gdscript/tags.scm");
+const GD_USE: &str = include_str!("../../queries/gdscript/imports.scm");
+const GDSHADER_TAGS: &str = include_str!("../../queries/gdshader/tags.scm");
+const GDSHADER_USE: &str = include_str!("../../queries/gdshader/imports.scm");
 
 #[cfg(test)]
 mod tests {
@@ -779,6 +789,56 @@ mod tests {
 
         // Calls feed the call graph: helper() is referenced from handler.
         assert!(p.calls.iter().any(|c| c.callee_name == "helper"), "got {:?}", p.calls);
+    }
+
+    #[test]
+    fn parses_gdscript() {
+        let src = "extends \"res://actors/base_actor.gd\"\n\
+                   class_name Player\n\
+                   const Bullet = preload(\"res://weapons/bullet.gd\")\n\
+                   signal died(reason)\n\
+                   enum State { IDLE, RUN }\n\
+                   func _ready():\n\tshoot()\n\
+                   func shoot():\n\tvar b = Bullet.new()\n\tadd_child(b)\n\
+                   \tvar cfg = ConfigFile.new()\n\tcfg.load(\"user://settings.cfg\")\n\
+                   \tvar s = load(\"res://scenes/hit.tscn\")\n\
+                   class Inner:\n\tfunc tick():\n\t\tpass\n";
+        let p = parse_lang(src, "gdscript");
+
+        for (name, kind) in [("Player", "class"), ("Bullet", "constant"), ("died", "signal"),
+                             ("State", "enum"), ("_ready", "function"), ("shoot", "function"),
+                             ("Inner", "class"), ("tick", "function")] {
+            assert!(has(&p, name, kind), "missing {kind} {name}: {:?}", p.symbols);
+        }
+
+        let modules: Vec<&str> = p.imports.iter().map(|i| i.from_module.as_str()).collect();
+        assert!(modules.contains(&"res://actors/base_actor.gd"), "got {modules:?}");
+        assert!(modules.contains(&"res://weapons/bullet.gd"));
+        assert!(modules.contains(&"res://scenes/hit.tscn"));
+        // user:// is runtime data, not a dependency between project files.
+        assert!(!modules.iter().any(|m| m.starts_with("user://")), "got {modules:?}");
+
+        let callees: Vec<&str> = p.calls.iter().map(|c| c.callee_name.as_str()).collect();
+        assert!(callees.contains(&"shoot"), "got {callees:?}");
+        assert!(callees.contains(&"add_child"));
+        assert!(callees.contains(&"new"), "method call on an object");
+    }
+
+    #[test]
+    fn parses_gdshader() {
+        let src = "shader_type canvas_item;\n\
+                   #include \"res://shaders/common.gdshaderinc\"\n\
+                   struct Light { vec3 color; };\n\
+                   vec3 tint(vec3 c) { return c * 0.5; }\n\
+                   void fragment() { COLOR.rgb = tint(COLOR.rgb); }\n";
+        let p = parse_lang(src, "gdshader");
+
+        assert!(has(&p, "tint", "function"), "got {:?}", p.symbols);
+        assert!(has(&p, "fragment", "function"));
+        assert!(has(&p, "Light", "struct"));
+        assert!(p.imports.iter().any(|i| i.from_module == "res://shaders/common.gdshaderinc"),
+            "got {:?}", p.imports);
+        assert!(p.calls.iter().any(|c| c.callee_name == "tint"), "got {:?}", p.calls);
     }
 
     #[test]

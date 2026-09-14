@@ -6,6 +6,16 @@ All notable changes to **ragpilot** are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- **Godot: GDScript and the Godot shading language.** Neither grammar crate
+  exports a usable tags query, so ragpilot ships its own. GDScript yields
+  functions, `class_name`, inner classes, signals, enums and constants, with
+  calls including method calls; `preload`, `load` and `extends` become imports
+  when they point at a `res://` path — `user://` is runtime data, not a
+  dependency. Shaders yield functions and structs, calls, and `#include`.
+  `init` offers `.gd`, `.gdshader` and `.gdshaderinc` as one "godot" choice.
+  C# and C++ (GDExtension) were already supported.
+
 ## [0.9.0] — 2026-09-14
 
 ### Fixed

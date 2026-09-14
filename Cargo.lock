@@ -2521,6 +2521,8 @@ dependencies = [
  "tree-sitter-c",
  "tree-sitter-c-sharp",
  "tree-sitter-cpp",
+ "tree-sitter-gdscript",
+ "tree-sitter-gdshader",
  "tree-sitter-go",
  "tree-sitter-java",
  "tree-sitter-javascript",
@@ -3780,6 +3782,26 @@ name = "tree-sitter-cpp"
 version = "0.23.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df2196ea9d47b4ab4a31b9297eaa5a5d19a0b121dceb9f118f6790ad0ab94743"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
+name = "tree-sitter-gdscript"
+version = "6.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b7a37fe8c0a10c0c39ecd5b2f7db53933f691488f5572409a4d3c0dfeb3f6108"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
+name = "tree-sitter-gdshader"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f915f22caa639690f4df0017ef06f6217573cd7ebca8d83d67a5220ec4a7844a"
 dependencies = [
  "cc",
  "tree-sitter-language",
