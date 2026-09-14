@@ -6,6 +6,8 @@ All notable changes to **ragpilot** are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-09-14
+
 ### Added
 - **Godot: GDScript and the Godot shading language.** Neither grammar crate
   exports a usable tags query, so ragpilot ships its own. GDScript yields
