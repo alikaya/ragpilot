@@ -16,7 +16,7 @@ optdepends=('qdrant: vector database the index is stored in (or run qdrant in Do
             'claude-code: compiler engine for the second brain')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
 # Filled in by `updpkgsums` once the v$pkgver tag is on GitHub.
-sha256sums=('SKIP')
+sha256sums=('d51f636e570bca3be924d95e9a3fda9819214e417f297424087a1b156c7aca67')
 
 prepare() {
   cd "$pkgname-$pkgver"
