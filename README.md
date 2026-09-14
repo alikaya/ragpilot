@@ -77,8 +77,8 @@ docker run -d -p 6334:6334 qdrant/qdrant
 No Rust toolchain, no compile. Download the tarball for your release and:
 
 ```bash
-tar -xzf ragpilot-0.8.0-x86_64-linux-gnu.tar.gz
-cd ragpilot-0.8.0-x86_64-linux-gnu
+tar -xzf ragpilot-0.9.0-x86_64-linux-gnu.tar.gz
+cd ragpilot-0.9.0-x86_64-linux-gnu
 ./install.sh
 ```
 
@@ -100,6 +100,15 @@ everything after them. On anything older or on ARM, install from source.
 To build the tarball yourself, see [packaging/](packaging/): one script, and
 the compile happens inside `ubuntu:22.04` so the result cannot pick up a newer
 glibc than the target has.
+
+### Arch Linux (AUR)
+
+```bash
+yay -S ragpilot        # or: paru -S ragpilot
+```
+
+Builds from the release tag. Qdrant is an optional dependency — install the
+`qdrant` AUR package or run it in Docker.
 
 ### From crates.io
 

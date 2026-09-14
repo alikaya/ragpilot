@@ -29,3 +29,6 @@ ChatGPT Image*.png
 
 # Packaging output
 dist/
+
+# AUR package clone (its own git repo)
+.aur-repo/

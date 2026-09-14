@@ -6,7 +6,30 @@ All notable changes to **ragpilot** are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-09-14
+
+### Fixed
+- **The session-end flush actually runs now.** Claude Code does not wait for a
+  SessionEnd hook: it cancels whatever is still running when the session goes
+  away — a plain `sleep 2` is killed too, so this is not a timeout. Summarising
+  takes a model call of about ten seconds, so the hook was cancelled every time
+  ("Hook cancelled") and nothing was written at session end; the daily blocks
+  were coming from PreCompact alone. The hook now resolves the transcript and
+  hands the work to a background process in its own process group, returning in
+  about 5 ms. An explicit `--transcript` still works inline.
+- **The compiler no longer fires the brain hooks on itself.** It summarises by
+  running `claude -p`, an agent session that inherited the project's hooks: the
+  nested `session-end` wrote a second, reworded summary of the same session, and
+  the nested `session-start` consumed the missed-flush marker meant for the next
+  real session. The child is now marked with `RAGPILOT_BRAIN_HOOK` and both hooks
+  return immediately when they see it.
+
 ### Added
+- **Prebuilt Linux tarball.** `packaging/build.sh` compiles inside
+  `ubuntu:22.04`, so the binary runs on glibc 2.35 and newer, and `--verify`
+  installs it into a stock image and runs it. The bundled `install.sh` needs no
+  root, checks architecture and glibc first, and warns about a missing CA bundle
+  and a `PATH` without the install directory.
 - **Lua.** Tree-sitter symbols and calls through the grammar's own tags query —
   `function M.f()`, `function obj:m()`, `local function`, functions assigned to
   locals or table fields — plus a `require` import query covering the call,
