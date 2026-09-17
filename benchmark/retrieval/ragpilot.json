@@ -1,0 +1,240 @@
+{
+ "corpus": "ragpilot (this repo, src/ only)",
+ "note": "Frozen 2026-09-17. Index the repo with include_dirs = [\"src\"]: benchmark/ holds copies of the code and would compete with it. Do not edit queries to fit a result.",
+ "queries": [
+  {
+   "q": "split file content into overlapping fixed-size pieces for embedding",
+   "kind": "nl",
+   "file": "src/indexer.rs",
+   "symbol": "chunk_text"
+  },
+  {
+   "q": "detect minified files with extremely long lines so they are skipped",
+   "kind": "nl",
+   "file": "src/indexer.rs",
+   "symbol": "looks_minified"
+  },
+  {
+   "q": "prevent two indexing runs from working on the same project at the same time",
+   "kind": "nl",
+   "file": "src/indexer.rs",
+   "symbol": "try_acquire_index_lock"
+  },
+  {
+   "q": "derive a stable project identifier from the folder path using a hash",
+   "kind": "nl",
+   "file": "src/paths.rs",
+   "symbol": "project_id"
+  },
+  {
+   "q": "turn a folder name into a safe lowercase slug",
+   "kind": "nl",
+   "file": "src/paths.rs",
+   "symbol": "slug"
+  },
+  {
+   "q": "keep user-added keys like env when rewriting the MCP server entry",
+   "kind": "nl",
+   "file": "src/agents.rs",
+   "symbol": "merge_entry"
+  },
+  {
+   "q": "write the Codex TOML configuration for the MCP server",
+   "kind": "nl",
+   "file": "src/agents.rs",
+   "symbol": "codex"
+  },
+  {
+   "q": "run the session summary in a background process so the hook returns immediately",
+   "kind": "nl",
+   "file": "src/brain/session.rs",
+   "symbol": "hand_off"
+  },
+  {
+   "q": "cut a transcript down to a token budget",
+   "kind": "nl",
+   "file": "src/brain/session.rs",
+   "symbol": "truncate_tokens"
+  },
+  {
+   "q": "read the transcript path from the hook payload on standard input",
+   "kind": "nl",
+   "file": "src/brain/session.rs",
+   "symbol": "transcript_from_stdin"
+  },
+  {
+   "q": "remove the opened date stamps from thread items",
+   "kind": "nl",
+   "file": "src/brain/vault.rs",
+   "symbol": "strip_opened"
+  },
+  {
+   "q": "add new open threads and close finished ones in the threads file",
+   "kind": "nl",
+   "file": "src/brain/vault.rs",
+   "symbol": "update_threads"
+  },
+  {
+   "q": "normalize a note title into a file name for knowledge notes",
+   "kind": "nl",
+   "file": "src/brain/compile.rs",
+   "symbol": "slugify"
+  },
+  {
+   "q": "import conversations exported from ChatGPT",
+   "kind": "nl",
+   "file": "src/brain/import.rs",
+   "symbol": "parse_chatgpt"
+  },
+  {
+   "q": "find a YYYY-MM-DD date inside a file name",
+   "kind": "nl",
+   "file": "src/brain/import.rs",
+   "symbol": "find_iso_date"
+  },
+  {
+   "q": "generate the systemd timer unit for the nightly compile",
+   "kind": "nl",
+   "file": "src/brain/schedule.rs",
+   "symbol": "systemd_timer"
+  },
+  {
+   "q": "pull the generated text out of a Gemini API response",
+   "kind": "nl",
+   "file": "src/brain/engine/gemini.rs",
+   "symbol": "extract_text"
+  },
+  {
+   "q": "find wiki links that point to notes which do not exist",
+   "kind": "nl",
+   "file": "src/brain/doctor.rs",
+   "symbol": "wikilink_check"
+  },
+  {
+   "q": "decode percent-encoded characters in a URL query string",
+   "kind": "nl",
+   "file": "src/dashboard/http.rs",
+   "symbol": "percent_decode"
+  },
+  {
+   "q": "check the access token on dashboard requests from the query or a cookie",
+   "kind": "nl",
+   "file": "src/dashboard/mod.rs",
+   "symbol": "authorised"
+  },
+  {
+   "q": "reject file paths that escape the project directory",
+   "kind": "nl",
+   "file": "src/mcp/tools/mod.rs",
+   "symbol": "resolve_in_root"
+  },
+  {
+   "q": "tell whether an MCP call targets the second brain so it is not reported",
+   "kind": "nl",
+   "file": "src/mcp/tools/mod.rs",
+   "symbol": "is_brain_request"
+  },
+  {
+   "q": "guess whether text is Turkish to adjust the token estimate",
+   "kind": "nl",
+   "file": "src/mcp/tools/context.rs",
+   "symbol": "is_probably_turkish"
+  },
+  {
+   "q": "translate a changed file path into the module names other files would import it by",
+   "kind": "nl",
+   "file": "src/store/impact_index.rs",
+   "symbol": "import_match_patterns"
+  },
+  {
+   "q": "create the vector collection if it does not exist yet",
+   "kind": "nl",
+   "file": "src/store/qdrant.rs",
+   "symbol": "ensure_collection"
+  },
+  {
+   "q": "reuse an old Qdrant collection under the new name without re-embedding",
+   "kind": "nl",
+   "file": "src/migrate.rs",
+   "symbol": "alias_existing_index"
+  },
+  {
+   "q": "compare two versions of a file and list added, removed and changed functions",
+   "kind": "nl",
+   "file": "src/semantic_diff.rs",
+   "symbol": "diff_symbols"
+  },
+  {
+   "q": "keep python signatures and docstrings but drop function bodies",
+   "kind": "nl",
+   "file": "src/skeleton.rs",
+   "symbol": "skeletonize_python"
+  },
+  {
+   "q": "check whether a downloaded model snapshot exists in the cache directory",
+   "kind": "nl",
+   "file": "src/embedder/local.rs",
+   "symbol": "cache_has_model"
+  },
+  {
+   "q": "parse the numbers a user typed to choose languages",
+   "kind": "nl",
+   "file": "src/wizard.rs",
+   "symbol": "parse_selection"
+  },
+  {
+   "q": "watch the project for file changes and reindex them while the server runs",
+   "kind": "nl",
+   "file": "src/watcher.rs",
+   "symbol": "start"
+  },
+  {
+   "q": "decide whether a file is indexed based on included folders, excluded folders and extension",
+   "kind": "nl",
+   "file": "src/orchestrator.rs",
+   "symbol": "should_index"
+  },
+  {
+   "q": "write_json_mcp",
+   "kind": "ident",
+   "file": "src/agents.rs",
+   "symbol": "write_json_mcp"
+  },
+  {
+   "q": "cmd_sync only tidy dry_run",
+   "kind": "ident",
+   "file": "src/migrate.rs",
+   "symbol": "cmd_sync"
+  },
+  {
+   "q": "get_affected_transitive",
+   "kind": "ident",
+   "file": "src/store/impact_index.rs",
+   "symbol": "get_affected_transitive"
+  },
+  {
+   "q": "take_miss",
+   "kind": "ident",
+   "file": "src/brain/session.rs",
+   "symbol": "take_miss"
+  },
+  {
+   "q": "collect_from_tags",
+   "kind": "ident",
+   "file": "src/parser/tree_sitter_parser.rs",
+   "symbol": "collect_from_tags"
+  },
+  {
+   "q": "find_symbol_range",
+   "kind": "ident",
+   "file": "src/mcp/tools/rag.rs",
+   "symbol": "find_symbol_range"
+  },
+  {
+   "q": "workspace_root_from_initialize",
+   "kind": "ident",
+   "file": "src/mcp/mod.rs",
+   "symbol": "workspace_root_from_initialize"
+  }
+ ]
+}
