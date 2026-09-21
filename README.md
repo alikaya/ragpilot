@@ -77,8 +77,8 @@ docker run -d -p 6334:6334 qdrant/qdrant
 No Rust toolchain, no compile. Download the tarball for your release and:
 
 ```bash
-tar -xzf ragpilot-0.10.0-x86_64-linux-gnu.tar.gz
-cd ragpilot-0.10.0-x86_64-linux-gnu
+tar -xzf ragpilot-0.11.0-x86_64-linux-gnu.tar.gz
+cd ragpilot-0.11.0-x86_64-linux-gnu
 ./install.sh
 ```
 

@@ -6,6 +6,8 @@ All notable changes to **ragpilot** are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.11.0] — 2026-09-21
+
 ### Added
 - **QML.** Functions, signals, properties, inline components and `id:` objects,
   plus calls and imports. QML reaches other files by type name rather than by
