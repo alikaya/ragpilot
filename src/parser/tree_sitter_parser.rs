@@ -62,8 +62,12 @@ impl TreeSitterParser {
 impl Parser for TreeSitterParser {
     fn parse(&self, path: &str, content: &str, language: &str) -> ParsedFile {
         let spec = self.overrides.get(language).or_else(|| lang_spec(language));
+        // In QML the file is the component: services/Audio.qml is used as
+        // `Audio`, never through an import of the file. Giving the file a
+        // symbol of its own is what the usage edges point at.
+        let file_symbol = (language == "qml").then_some("component");
         if let Some(spec) = spec {
-            if let Some(parsed) = parse_with(spec, path, content) {
+            if let Some(parsed) = parse_with(spec, path, content, file_symbol) {
                 return parsed;
             }
         }
@@ -170,6 +174,9 @@ fn lang_defs() -> Vec<LangDef> {
         LangDef { name: "gdshader", language: tree_sitter_gdshader::LANGUAGE.into(),
             extractor: Tags(GDSHADER_TAGS),
             import: Some((GDSHADER_USE, ModulePath)) },
+        LangDef { name: "qml", language: tree_sitter_qmljs::LANGUAGE.into(),
+            extractor: Tags(QML_TAGS),
+            import: Some((QML_USE, ModulePath)) },
     ]
 }
 
@@ -246,7 +253,7 @@ fn build_overrides(dir: &Path) -> HashMap<String, LangSpec> {
     m
 }
 
-fn parse_with(spec: &LangSpec, path: &str, content: &str) -> Option<ParsedFile> {
+fn parse_with(spec: &LangSpec, path: &str, content: &str, file_symbol: Option<&str>) -> Option<ParsedFile> {
     let mut parser = TsParser::new();
     parser.set_language(&spec.language).ok()?;
     let tree = parser.parse(content, None)?;
@@ -259,7 +266,7 @@ fn parse_with(spec: &LangSpec, path: &str, content: &str) -> Option<ParsedFile> 
             let cs = collect_calls(content, src, root, calls, &syms);
             (syms, cs)
         }
-        Extractor::Tags(q) => collect_from_tags(path, content, src, root, q),
+        Extractor::Tags(q) => collect_from_tags(path, content, src, root, q, file_symbol),
     };
     let imports = collect_imports(path, content, src, root, spec.uses.as_ref());
 
@@ -277,10 +284,25 @@ fn collect_from_tags(
     src: &[u8],
     root: Node,
     query: &Query,
+    file_symbol: Option<&str>,
 ) -> (Vec<Symbol>, Vec<CallRef>) {
     let names = query.capture_names();
     let mut cursor = QueryCursor::new();
     let mut symbols = Vec::new();
+    // Spans the whole file, so it also owns the uses no smaller symbol
+    // encloses; innermost-wins attribution keeps every other one intact.
+    if let Some(kind) = file_symbol {
+        let stem = std::path::Path::new(path).file_stem().and_then(|s| s.to_str()).unwrap_or(path);
+        let last = content.lines().count().max(1);
+        symbols.push(Symbol {
+            id: format!("{path}::{stem}"),
+            path: path.to_string(),
+            name: stem.to_string(),
+            kind: kind.to_string(),
+            start_line: 1,
+            end_line: last,
+        });
+    }
     let mut call_sites: Vec<(String, usize)> = Vec::new();
 
     let mut it = cursor.matches(query, root, src);
@@ -632,6 +654,8 @@ const GD_TAGS: &str = include_str!("../../queries/gdscript/tags.scm");
 const GD_USE: &str = include_str!("../../queries/gdscript/imports.scm");
 const GDSHADER_TAGS: &str = include_str!("../../queries/gdshader/tags.scm");
 const GDSHADER_USE: &str = include_str!("../../queries/gdshader/imports.scm");
+const QML_TAGS: &str = include_str!("../../queries/qml/tags.scm");
+const QML_USE: &str = include_str!("../../queries/qml/imports.scm");
 
 #[cfg(test)]
 mod tests {
@@ -839,6 +863,53 @@ mod tests {
         assert!(p.imports.iter().any(|i| i.from_module == "res://shaders/common.gdshaderinc"),
             "got {:?}", p.imports);
         assert!(p.calls.iter().any(|c| c.callee_name == "tint"), "got {:?}", p.calls);
+    }
+
+    #[test]
+    fn parses_qml() {
+        let src = "pragma Singleton\n\
+                   import QtQuick\n\
+                   import qs.services\n\
+                   import \"../components\" as C\n\
+                   Item {\n\
+                   \x20   id: root\n\
+                   \x20   property real volume: Audio.volume\n\
+                   \x20   signal muted(bool on)\n\
+                   \x20   component Badge: Rectangle { }\n\
+                   \x20   function toggle() {\n\
+                   \x20       Audio.setMuted(!Audio.muted)\n\
+                   \x20       refresh()\n\
+                   \x20   }\n\
+                   \x20   StyledSlider {\n\
+                   \x20       id: slider\n\
+                   \x20   }\n\
+                   }\n";
+        let p = TreeSitterParser::new().parse("modules/VolumePanel.qml", src, "qml");
+
+        for (name, kind) in [("VolumePanel", "component"), ("root", "object"), ("slider", "object"),
+                             ("volume", "property"), ("muted", "signal"), ("Badge", "component"),
+                             ("toggle", "function")] {
+            assert!(has(&p, name, kind), "missing {kind} {name}: {:?}", p.symbols);
+        }
+        // The file-level component spans the whole file.
+        let file = p.symbols.iter().find(|s| s.name == "VolumePanel").unwrap();
+        assert_eq!((file.start_line, file.end_line), (1, 17));
+
+        let modules: Vec<&str> = p.imports.iter().map(|i| i.from_module.as_str()).collect();
+        for m in ["QtQuick", "qs.services", "../components"] {
+            assert!(modules.contains(&m), "missing import {m}: {modules:?}");
+        }
+
+        let edges: Vec<(&str, &str)> = p.calls.iter()
+            .map(|c| (c.caller_id.rsplit("::").next().unwrap(), c.callee_name.as_str())).collect();
+        // A singleton reached from a function, and from a property binding
+        // that only the file-level symbol encloses.
+        assert!(edges.contains(&("toggle", "Audio")), "got {edges:?}");
+        assert!(edges.contains(&("toggle", "refresh")));
+        assert!(edges.contains(&("volume", "Audio")) || edges.contains(&("VolumePanel", "Audio")), "got {edges:?}");
+        // Instantiating a component is a use of it; ids are not.
+        assert!(edges.iter().any(|(_, c)| *c == "StyledSlider"), "got {edges:?}");
+        assert!(!edges.iter().any(|(_, c)| *c == "root" || *c == "slider"));
     }
 
     #[test]

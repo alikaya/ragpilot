@@ -6,6 +6,15 @@ All notable changes to **ragpilot** are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- **QML.** Functions, signals, properties, inline components and `id:` objects,
+  plus calls and imports. QML reaches other files by type name rather than by
+  import — `services/Audio.qml` is used as `Audio` — so each file is also a
+  component symbol named after it, and `Audio { … }` instantiations and
+  `Audio.volume` singleton references are recorded as uses. That is what makes
+  "who uses Audio" and impact analysis work at file level. The grammar crate
+  ships no tags query, so ragpilot supplies one.
+
 ## [0.10.0] — 2026-09-14
 
 ### Added

@@ -27,6 +27,7 @@ const LANGUAGES: &[(&str, &[&str])] = &[
     ("swift",       &["swift"]),
     ("lua",         &["lua"]),
     ("godot",       &["gd", "gdshader", "gdshaderinc"]),
+    ("qml",         &["qml"]),
     ("dart/flutter", &["dart"]),
     ("web",         &["html", "css", "scss", "vue", "svelte"]),
     ("shell",       &["sh", "bash"]),

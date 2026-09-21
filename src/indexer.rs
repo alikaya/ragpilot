@@ -308,6 +308,7 @@ pub fn extract_symbol(content: &str, language: &str) -> Option<String> {
         "swift" => &["func ", "class ", "struct "],
         "lua" => &["local function ", "function "],
         "gdscript" => &["static func ", "func ", "class_name ", "class "],
+        "qml" => &["function ", "signal ", "component "],
         _ => return None,
     };
 
@@ -342,6 +343,7 @@ pub fn file_language(extension: &str) -> &'static str {
         "lua" => "lua",
         "gd" => "gdscript",
         "gdshader" | "gdshaderinc" => "gdshader",
+        "qml" => "qml",
         "dart" => "dart",
         "kt" | "kts" => "kotlin",
         "scala" => "scala",
