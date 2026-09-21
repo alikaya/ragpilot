@@ -15,6 +15,14 @@ All notable changes to **ragpilot** are documented here. The format is based on
   "who uses Audio" and impact analysis work at file level. The grammar crate
   ships no tags query, so ragpilot supplies one.
 
+### Fixed
+- **`init` no longer indexes a fraction of a project without saying so.** When
+  any well-known source dir existed (`src/`, `components/`, …), the index was
+  restricted to those dirs regardless of where the code was. A Quickshell config
+  with `components/`, `modules/` and `services/` got 56 of its 281 QML files.
+  Known dirs now narrow the index only when they hold at least 90% of the code;
+  otherwise the whole root is indexed. Existing project configs are not changed.
+
 ## [0.10.0] — 2026-09-14
 
 ### Added

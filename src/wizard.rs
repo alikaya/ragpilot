@@ -40,6 +40,13 @@ const CANDIDATE_DIRS: &[&str] = &[
     "packages", "source", "components", "server", "client",
 ];
 
+/// Candidate dirs narrow the index only when they hold at least this share of
+/// the project's code. Below it, the code lives under names the list does not
+/// know — `modules/`, `services/`, one folder per feature — and restricting to
+/// the dirs that happen to match would index a fraction of the project with
+/// nothing to say so.
+const DIR_COVERAGE: f64 = 0.9;
+
 /// Directories never descended into during detection (config does not exist yet).
 const SCAN_EXCLUDE: &[&str] = &[
     ".git", ".rag", ".codex", ".fastembed_cache", "target",
@@ -55,7 +62,7 @@ pub struct IndexChoices {
 
 /// Detect languages/dirs, then either prompt (TTY) or auto-pick (non-TTY).
 pub fn configure(root: &Path) -> IndexChoices {
-    let (ext_counts, detected_dirs) = detect(root);
+    let (ext_counts, detected_dirs, dirs_cover_code) = detect(root);
     let lang_detected: Vec<bool> = LANGUAGES
         .iter()
         .map(|(_, exts)| exts.iter().any(|e| ext_counts.contains_key(*e)))
@@ -63,18 +70,28 @@ pub fn configure(root: &Path) -> IndexChoices {
 
     let interactive = io::stdin().is_terminal() && io::stdout().is_terminal();
     if !interactive {
-        return auto_choices(&ext_counts, &lang_detected, &detected_dirs);
+        let dirs: &[String] = if dirs_cover_code { &detected_dirs } else { &[] };
+        return auto_choices(&ext_counts, &lang_detected, dirs);
     }
 
     let extensions   = prompt_languages(&ext_counts, &lang_detected);
-    let include_dirs = prompt_dirs(&detected_dirs);
+    let include_dirs = prompt_dirs(&detected_dirs, dirs_cover_code);
     IndexChoices { extensions, include_dirs }
 }
 
 /// Walk the project (depth-limited, excluding caches/vendored dirs) and tally
-/// file extensions; also report which well-known source dirs exist.
-fn detect(root: &Path) -> (BTreeMap<String, usize>, Vec<String>) {
+/// file extensions; also report which well-known source dirs exist and
+/// whether they hold enough of the code to index them alone.
+fn detect(root: &Path) -> (BTreeMap<String, usize>, Vec<String>, bool) {
     let mut ext_counts: BTreeMap<String, usize> = BTreeMap::new();
+    // Code files, overall and under a candidate dir. Docs and config do not
+    // count: a README at the root is not a sign the sources live elsewhere.
+    let code_exts: Vec<&str> = LANGUAGES
+        .iter()
+        .filter(|(name, _)| *name != "docs/config")
+        .flat_map(|(_, exts)| exts.iter().copied())
+        .collect();
+    let (mut code_total, mut code_in_candidates) = (0usize, 0usize);
 
     for entry in WalkDir::new(root)
         .max_depth(8)
@@ -96,6 +113,15 @@ fn detect(root: &Path) -> (BTreeMap<String, usize>, Vec<String>) {
         }
         if let Some(ext) = entry.path().extension() {
             let ext = ext.to_string_lossy().to_lowercase();
+            if code_exts.contains(&ext.as_str()) {
+                code_total += 1;
+                let top = entry.path().strip_prefix(root).ok()
+                    .and_then(|rel| rel.components().next())
+                    .map(|c| c.as_os_str().to_string_lossy().to_string());
+                if top.is_some_and(|t| CANDIDATE_DIRS.contains(&t.as_str()) && entry.depth() > 1) {
+                    code_in_candidates += 1;
+                }
+            }
             *ext_counts.entry(ext).or_insert(0) += 1;
         }
     }
@@ -106,7 +132,8 @@ fn detect(root: &Path) -> (BTreeMap<String, usize>, Vec<String>) {
         .map(|d| d.to_string())
         .collect();
 
-    (ext_counts, dirs)
+    let covers = code_total == 0 || code_in_candidates as f64 >= code_total as f64 * DIR_COVERAGE;
+    (ext_counts, dirs, covers)
 }
 
 fn prompt_languages(ext_counts: &BTreeMap<String, usize>, detected: &[bool]) -> Vec<String> {
@@ -153,15 +180,15 @@ fn prompt_languages(ext_counts: &BTreeMap<String, usize>, detected: &[bool]) -> 
     extensions
 }
 
-fn prompt_dirs(detected: &[String]) -> Vec<String> {
+fn prompt_dirs(detected: &[String], cover_code: bool) -> Vec<String> {
     println!("\n{}", "Directories to index:".bold());
     println!("  [ 1] {}", "(entire project root)".dimmed());
     for (i, d) in detected.iter().enumerate() {
         println!("  [{:>2}] {}/", i + 2, d);
     }
 
-    // default: detected dirs if any, else whole root (option 1)
-    let default_sel: Vec<usize> = if detected.is_empty() {
+    // default: the detected dirs when they hold the code, else the whole root
+    let default_sel: Vec<usize> = if detected.is_empty() || !cover_code {
         vec![0]
     } else {
         (1..=detected.len()).collect()
@@ -262,4 +289,41 @@ fn numbers(idx: &[usize]) -> String {
         .map(|i| (i + 1).to_string())
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::detect;
+    use std::fs;
+
+    fn project(name: &str, files: &[&str]) -> std::path::PathBuf {
+        let root = std::env::temp_dir().join(format!("ragpilot_wizard_{name}_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        for f in files {
+            let p = root.join(f);
+            fs::create_dir_all(p.parent().unwrap()).unwrap();
+            fs::write(p, "x").unwrap();
+        }
+        root
+    }
+
+    #[test]
+    fn candidate_dirs_holding_the_code_narrow_the_index() {
+        let root = project("src", &["src/main.rs", "src/lib.rs", "src/a/b.rs", "README.md", "Cargo.toml"]);
+        let (_, dirs, covers) = detect(&root);
+        assert_eq!(dirs, vec!["src".to_string()]);
+        assert!(covers, "docs and config at the root must not count against src");
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn a_candidate_dir_holding_a_fraction_of_the_code_does_not() {
+        // A Quickshell-style layout: only components/ is a known name.
+        let root = project("qml", &["shell.qml", "components/Button.qml",
+            "modules/bar/Bar.qml", "modules/bar/Clock.qml", "services/Audio.qml"]);
+        let (_, dirs, covers) = detect(&root);
+        assert_eq!(dirs, vec!["components".to_string()]);
+        assert!(!covers, "1 of 5 files is in components/; indexing it alone loses the rest");
+        fs::remove_dir_all(&root).ok();
+    }
 }
